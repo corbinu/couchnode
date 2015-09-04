@@ -69,7 +69,7 @@ before_install:
   - if [ $(uname -s) == 'Linux' ]; then export CNCSTR="http://$CB_IP:8091/"; fi;
   - if [ $(uname -s) == 'Linux' ]; then docker exec -it $CB_ID couchbase-bootstrap bootstrap; fi;
 
-install:
+build:
   - npm install
 test:
   - if [ $(uname -s) == 'Linux' ]; then make test; fi;
