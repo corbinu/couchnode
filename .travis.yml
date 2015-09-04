@@ -67,17 +67,17 @@ before_install:
   - export CB_ID=$(docker run -d -p 8091:8091 couchbase/server:$CB_VERSION)
   - export CB_IP=$(docker inspect --format '{{ .NetworkSettings.IPAddress }}' $CP_ID)
   - export CNCSTR="http://$CB_IP:8091/"
-  - docker exec -it $CB_ID couchbase-cli node-init -c 127.0.0.1:8091 -u access -p password \
+  - docker exec -it $CB_ID /bin/bash -c "couchbase-cli node-init -c 127.0.0.1:8091 -u access -p password \
       --node-init-data-path=/opt/couchbase/var/lib/couchbase/data \
       --node-init-index-path=/opt/couchbase/var/lib/couchbase/data \
-      --node-init-hostname=$CB_IP
-  - docker exec -it $CB_ID couchbase-cli cluster-init -c 127.0.0.1:8091 -u access -p password \
+      --node-init-hostname=$CB_IP"
+  - docker exec -it $CB_ID /bin/bash -c "couchbase-cli cluster-init -c 127.0.0.1:8091 -u access -p password \
           --cluster-username=Administrator \
           --cluster-password=password \
           --cluster-port=8091 \
           --services=index,data,query \
           --cluster-index-ramsize=256 \
-          --cluster-ramsize=256
+          --cluster-ramsize=256"
 
 install:
   - npm install
