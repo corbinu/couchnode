@@ -20,7 +20,7 @@
 using namespace Couchnode;
 
 void Cas::Init() {
-    Nan::HandleScope();
+    Nan::HandleScope scope;
 
     Local<FunctionTemplate> t = Nan::New<FunctionTemplate>();
     t->InstanceTemplate()->SetInternalFieldCount(1);
@@ -37,7 +37,7 @@ NAN_METHOD(Cas::fnToString)
 {
     uint64_t casVal = 0;
     char casStr[24] = "";
-    Nan::HandleScope();
+    Nan::HandleScope scope;
 
     Cas::GetCas(info.This(), &casVal);
     sprintf(casStr, "%llu", casVal);
@@ -49,7 +49,7 @@ NAN_METHOD(Cas::fnInspect)
 {
     uint64_t casVal = 0;
     char casStr[14+24] = "";
-    Nan::HandleScope();
+    Nan::HandleScope scope;
 
     Cas::GetCas(info.This(), &casVal);
     sprintf(casStr, "CouchbaseCas<%llu>", casVal);
@@ -66,8 +66,7 @@ Handle<Value> Cas::CreateCas(uint64_t cas) {
     Local<Object> ret = Nan::New<Function>(casClass)->NewInstance();
     uint64_t *p = new uint64_t(cas);
 
-    ret->SetIndexedPropertiesToExternalArrayData(
-        p, v8::kExternalUnsignedIntArray, 2);
+    Nan::SetInternalFieldPointer(ret, 0, p);
 
     Nan::Persistent<v8::Object> persistent(ret);
     persistent.SetWeak(reinterpret_cast<int*>(p), casDtor,
@@ -85,15 +84,12 @@ bool _StrToCas(Handle<Value> obj, uint64_t *p) {
 
 bool _ObjToCas(Handle<Value> obj, uint64_t *p) {
     Handle<Object> realObj = obj.As<Object>();
-    if (realObj->GetIndexedPropertiesExternalArrayDataLength() != 2) {
-        return false;
-    }
-    *p = *(uint64_t*)realObj->GetIndexedPropertiesExternalArrayData();
+    *p = *(uint64_t*)Nan::GetInternalFieldPointer(realObj, 0);
     return true;
 }
 
 bool Cas::GetCas(Handle<Value> obj, uint64_t *p) {
-    Nan::HandleScope();
+    Nan::HandleScope scope;
     if (obj->IsObject()) {
         return _ObjToCas(obj, p);
     } else if (obj->IsString()) {
