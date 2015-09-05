@@ -72,3 +72,6 @@ before_install:
 install:
   - npm install
   - if [ $(uname -s) == 'Linux' ]; then make test; fi;
+
+script:
+  - echo "done"

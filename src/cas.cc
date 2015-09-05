@@ -83,7 +83,7 @@ bool _StrToCas(Handle<Value> obj, uint64_t *p) {
 }
 
 bool _ObjToCas(Handle<Value> obj, uint64_t *p) {
-    Handle<Object> realObj = obj.As<Object>();
+    Local<Object> realObj = obj.As<Object>();
     *p = *(uint64_t*)Nan::GetInternalFieldPointer(realObj, 0);
     return true;
 }
