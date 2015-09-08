@@ -82,13 +82,13 @@ bool _StrToCas(Handle<Value> obj, uint64_t *p) {
     return true;
 }
 
-bool _ObjToCas(Handle<Value> obj, uint64_t *p) {
+bool _ObjToCas(Local<Value> obj, uint64_t *p) {
     Local<Object> realObj = obj.As<Object>();
     *p = *(uint64_t*)Nan::GetInternalFieldPointer(realObj, 0);
     return true;
 }
 
-bool Cas::GetCas(Handle<Value> obj, uint64_t *p) {
+bool Cas::GetCas(Local<Value> obj, uint64_t *p) {
     Nan::HandleScope scope;
     if (obj->IsObject()) {
         return _ObjToCas(obj, p);
