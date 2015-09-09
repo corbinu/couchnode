@@ -65,6 +65,7 @@ before_install:
   - nvm use $NODE_VERSION
   - if [ $(uname -s) == 'Linux' ]; then docker pull corbinu/couchbase-test:$CB_VERSION; fi;
   - if [ $(uname -s) == 'Linux' ]; then export CB_ID=$(docker run -d -p 8091:8091 --env BUCKET=default corbinu/couchbase-test:$CB_VERSION); fi;
+  - sleep 10
   - if [ $(uname -s) == 'Linux' ]; then export CB_IP=$(docker inspect --format '{{ .NetworkSettings.IPAddress }}' $CB_ID); fi;
   - if [ $(uname -s) == 'Linux' ]; then export CNCSTR="http://$CB_IP:8091/"; fi;
   - if [ $(uname -s) == 'Linux' ]; then docker exec -it $CB_ID couchbase-bootstrap bootstrap; fi;
