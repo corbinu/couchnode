@@ -23,7 +23,6 @@ void Cas::Init() {
     Nan::HandleScope scope;
 
     Local<FunctionTemplate> t = Nan::New<FunctionTemplate>();
-    t->InstanceTemplate()->SetInternalFieldCount(1);
     t->SetClassName(Nan::New<String>("CouchbaseCas").ToLocalChecked());
 
     Nan::SetPrototypeMethod(t, "toString", fnToString);
@@ -57,20 +56,12 @@ NAN_METHOD(Cas::fnInspect)
             Nan::New<String>(casStr).ToLocalChecked());
 }
 
-void casDtor(const Nan::WeakCallbackInfo<int> &data) {
-    uint64_t *value = reinterpret_cast<uint64_t*>(data.GetParameter());
-    delete value;
-}
-
 Handle<Value> Cas::CreateCas(uint64_t cas) {
     Local<Object> ret = Nan::New<Function>(casClass)->NewInstance();
-    uint64_t *p = new uint64_t(cas);
 
-    Nan::SetInternalFieldPointer(ret, 0, p);
-
-    Nan::Persistent<v8::Object> persistent(ret);
-    persistent.SetWeak(reinterpret_cast<int*>(p), casDtor,
-        Nan::WeakCallbackType::kInternalFields);
+    Local<Value> casData =
+            Nan::CopyBuffer((char*)&cas, sizeof(uint64_t)).ToLocalChecked();
+    ret->Set(0, casData);
 
     return ret;
 }
@@ -84,7 +75,18 @@ bool _StrToCas(Handle<Value> obj, uint64_t *p) {
 
 bool _ObjToCas(Local<Value> obj, uint64_t *p) {
     Local<Object> realObj = obj.As<Object>();
-    *p = *(uint64_t*)Nan::GetInternalFieldPointer(realObj, 0);
+    Local<Value> casData = realObj->Get(0);
+
+    if (!node::Buffer::HasInstance(casData)) {
+        return false;
+    }
+
+    if (node::Buffer::Length(casData) != sizeof(uint64_t)) {
+        return false;
+    }
+
+    *p = *(uint64_t*)node::Buffer::Data(casData);
+
     return true;
 }
 
