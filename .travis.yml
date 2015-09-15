@@ -5,6 +5,11 @@ language: cpp
 services:
   - docker
 
+env:
+  global:
+    - secure: "Orcl5JXYdo+qGx7HYJs7SBc+bJzqmOdM5//r52GUgyCHTDVR5OijgLV+TopfjOQ/rb72gVub5KH1rXui3aNvYlMkdow7RX/3rdqI9o1cI8F/QWaUloi4juibwAodRharCFRTwcLOm7RW9kbgu3mqMUvpLpP1KOfjOkXIcp9Z94g6/mKFN4IWtTCCX2MEavkQrkjVBbmfLe2GZXGGsx0FDBnweDgwu0MXuOjJabA19UDLQCEGb9N9oGuWOGuu8cCVwlJij0IUJ06gDhMzVg6OUO3g6kf4OMRnaeJ3GWBsh7YgPKLdXwi5ssG241tPwfevHwCx7coughuDhpQtCJ7sLDrux6hVoXhaD8ryXfpeiPSHg2GY2eXHSlKnvK/6BE7dmVy6Cca6WIyWz/fvihaQN1S8LdrL6YoBR5LgBI4TO5OZNDxh6lxK6bLv0AQ+ExlL6FQ3rXp3l46MZC4UThRiD1EId7d6Pv0E1vtu0v7xEpf5yrH7oUJD5O1rrOmXwZcwkyjQy80Zmyu/ldiTAJ6gMrp4SNY+G/EM7DF8Qnt5ju1dAKk6hW4OvlK24YhPln1P0Wqyizcn5KLuyCkSTZp11eo75ZHWpUbaxjJfwnAJqjR1a69xOshUZPj8GFMsWq9MTM3U6sd9LgvPv0An8bq2bwCs7QoYa/8GmDbBEOrbobs="
+    - secure: "BKYcohWDtZ0hIfjkxEgPQnBoSjpZjly471kXSCBexbELaMquSMK85ED5hU6FFkM1LsWoI1iObDbvrEgqPJ6TvHsO5pYi1Q7nOG4vtucW/Tv7e7vqAR0D2/aYnPT/p+QP0CIHXvAtbcLwhW616/hsOUz4oPcTaFKcv0px4V6TOcN7J+sSoFNQT415dt+yjDS/JqKpLPSKCr0yU71lOvGYOGZ9IKeTpBqOAighC2BFHcUcWIh6OWZ2J5SymQHrR/zGYGcEZMaFsWoWrMuduV+Hrua6RZDj6rZiEv3dKoipi9UoSVP+BL40cIwTgdBDMu2FPQAxKOzLXwLDx8VLVd5tKfvciepfIuHohj28j69JV9vnYdiG7FpE9PEQ3q3SLTZjOuzOb6S3xBGuh3MeKutBWPZwhuVmUixY640m38/8e08o1ceWBl8nO2b+ODkXtk3KwAiN34QXgEK2qmoTYPiJVDEIgy4yRXgTepfWWYiV97C5o4w+oWP+P4RCGbD1QHiohH/ODlSPReWyCV+Ol2bYyWgnSE+covWRhUXzuLG0arecaM5gbaSXNRWbMaGDvUJFQFiQKdIGI861rV4QNDMWrq1F1sIzw+GPGZRR2rOjbCzw3AKLNfk44jnopIjJyYPAvIju0VhghmwsGKyBOhM7aFYxhnEpNs+2pYGwFlb32+c="
+
 matrix:
   include:
      # Linux
@@ -55,7 +60,7 @@ before_install:
   - source ~/.nvm/nvm.sh
   - nvm install $NODE_VERSION
   - nvm use $NODE_VERSION
-  - npm install -g json
+  - npm install -g json node-pre-gyp
   - if [ $(uname -s) == 'Linux' ]; then docker pull corbinu/couchbase-test:$CB_VERSION; fi;
   - if [ $(uname -s) == 'Linux' ]; then export CB_ID=$(docker run -d -p 8091:8091 --env BUCKET=default corbinu/couchbase-test:$CB_VERSION); fi;
   - if [ $(uname -s) == 'Linux' ]; then CBRES=0; while [ $CBRES != 1 ]; do echo -n '.'; R=$(docker inspect $CB_ID | json -a State.Running); if [ "$R" == "true" ]; then let CBRES=1; else sleep 1.3; fi; done; fi;
@@ -65,7 +70,5 @@ before_install:
 
 install:
   - npm install
+  - node-pre-gyp package testpackage
   - if [ $(uname -s) == 'Linux' ]; then make test; fi;
-
-script:
-  - echo "done"
