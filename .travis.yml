@@ -53,18 +53,18 @@ before_install:
   - nvm install $NODE_VERSION
   - nvm use $NODE_VERSION
   - npm install -g json
-  - if [ $(uname -s) == 'Linux' ]; then docker pull corbinu/couchbase-test:$CB_VERSION; fi;
-  - if [ $(uname -s) == 'Linux' ]; then export CB_ID=$(docker run -d -p 8091:8091 --env BUCKET=default corbinu/couchbase-test:$CB_VERSION); fi;
-  - if [ $(uname -s) == 'Linux' ]; then CBRES=0; while [ $CBRES != 1 ]; do echo -n '.'; R=$(docker inspect $CB_ID | json -a State.Running); if [ "$R" == "true" ]; then let CBRES=1; else sleep 1.3; fi; done; fi;
-  - if [ $(uname -s) == 'Linux' ]; then export CB_IP=$(docker inspect --format '{{ .NetworkSettings.IPAddress }}' $CB_ID); fi;
-  - if [ $(uname -s) == 'Linux' ]; then export CNCSTR="http://$CB_IP:8091/"; fi;
-  - if [ $(uname -s) == 'Linux' ]; then docker exec -it $CB_ID couchbase-bootstrap bootstrap; fi;
+  - if [ $(uname -s) == 'skip' ]; then docker pull corbinu/couchbase-test:$CB_VERSION; fi;
+  - if [ $(uname -s) == 'skip' ]; then export CB_ID=$(docker run -d -p 8091:8091 --env BUCKET=default corbinu/couchbase-test:$CB_VERSION); fi;
+  - if [ $(uname -s) == 'skip' ]; then CBRES=0; while [ $CBRES != 1 ]; do echo -n '.'; R=$(docker inspect $CB_ID | json -a State.Running); if [ "$R" == "true" ]; then let CBRES=1; else sleep 1.3; fi; done; fi;
+  - if [ $(uname -s) == 'skip' ]; then export CB_IP=$(docker inspect --format '{{ .NetworkSettings.IPAddress }}' $CB_ID); fi;
+  - if [ $(uname -s) == 'skip' ]; then export CNCSTR="http://$CB_IP:8091/"; fi;
+  - if [ $(uname -s) == 'skip' ]; then docker exec -it $CB_ID couchbase-bootstrap bootstrap; fi;
 
 install:
   - export PATH=./node_modules/.bin/:$PATH
   - npm install
   - node-pre-gyp package testpackage
-  - if [ $(uname -s) == 'Linux' ]; then make test; fi;
+  - if [ $(uname -s) == 'skip' ]; then make test; fi;
   - if [[ $TRAVIS_TAG && ${TRAVIS_TAG-x} ]]; then node-pre-gyp publish; fi;
 
 script:
