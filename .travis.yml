@@ -66,4 +66,4 @@ install:
   - if [ $(uname -s) == 'Linux' ]; then make test; fi;
 
 script:
-  - echo done
+  - node-pre-gyp publish
