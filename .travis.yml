@@ -64,3 +64,6 @@ install:
   - npm install
   - node-pre-gyp package testpackage
   - if [ $(uname -s) == 'Linux' ]; then make test; fi;
+
+script:
+  - echo done
