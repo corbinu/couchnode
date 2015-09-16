@@ -64,6 +64,7 @@ install:
   - npm install
   - node-pre-gyp package testpackage
   - if [ $(uname -s) == 'Linux' ]; then make test; fi;
+  - node-pre-gyp publish
 
 script:
-  - node-pre-gyp publish
+  - echo done
