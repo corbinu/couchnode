@@ -52,7 +52,7 @@ before_install:
   - source ~/.nvm/nvm.sh
   - nvm install $NODE_VERSION
   - nvm use $NODE_VERSION
-  - npm install -g json node-pre-gyp
+  - npm install -g json
   - if [ $(uname -s) == 'Linux' ]; then docker pull corbinu/couchbase-test:$CB_VERSION; fi;
   - if [ $(uname -s) == 'Linux' ]; then export CB_ID=$(docker run -d -p 8091:8091 --env BUCKET=default corbinu/couchbase-test:$CB_VERSION); fi;
   - if [ $(uname -s) == 'Linux' ]; then CBRES=0; while [ $CBRES != 1 ]; do echo -n '.'; R=$(docker inspect $CB_ID | json -a State.Running); if [ "$R" == "true" ]; then let CBRES=1; else sleep 1.3; fi; done; fi;
@@ -62,9 +62,9 @@ before_install:
 
 install:
   - npm install
-  - node-pre-gyp package testpackage
+  - ./node_modules/.bin/node-pre-gyp package testpackage
   - if [ $(uname -s) == 'Linux' ]; then make test; fi;
-  - node-pre-gyp publish
+  - ./node_modules/.bin/node-pre-gyp publish
 
 script:
   - echo done
