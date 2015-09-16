@@ -5,66 +5,47 @@ language: cpp
 services:
   - docker
 
+env:
+  global:
+    - secure: "X76FUL3vL1+1x1ojXr5Fu6OZUZXrgiFiOGRtlfUmptrV4h4cTT4xcPQU3Em/Fw+eWytj+0SIKcOsMm8DfPoBPPgY97euMxOA6m3bvbGhusjEZikOYyJa+aLXwFCmqalRt4xFXZqMNnCpxvKHvkiHTrLD72GjfhRhsR2rHNE9M8X7S3PUwgN5dFCwrceRawMXiDeY+jXf17w3g/GX5gz64orQyqg/iHSVFalxGP/QNzOzFaV3UGdIVZXaXBMGc25ha8qOsm1aTZSEYEnDm+cjpIy7+i3kFWphObZxkOKTTuXixvtueJ5wQqS9ikWpMNry0fKlQsfHMhYVHDJBxTayaryoZUSWCGsu6LbzV+VzuL1GxQ24PJoQvIYC47344yy9eZ1qfSKcNiU7v5ecjSLd2nDUDwe3SYrQQhGGzxBW/5fOKS++bkV+I8Py7ceLmmmdSxJeNdYSBRxeokCxncRwmIsj4RRlJWjMKeIzLMLsay7SbxOWJ0WO98M6rQoYOHpJnhDqt7trG3e6K/auu6tc1X8zGjlIUpHSG9fe5HOCj7rxmsp1bgLgFgvzGcMQp91/d4uMVysvQDjHz0Aix1iPCQSCpWLIUubzeJdIPLgnH08NFN8KymDmmvtYMMOrzRI/8mgRkViYMQ6c+caB4HUMMVvQA50Z8dgBlZK/Hk+OJdk="
+    - secure: "L9HSzsUDffoySqU5yjJUwsIb+yXjsly3FimkiGeM0QhZq6znrGep2JDqgnEZEZGhr0Lr1wuPaCH2Y080e7h+AsF09Vp8nrQKSu1i0F0BGUI9ltw54XbL9W6H8CjgJSKgPJzR4PzKgsYzTWHhESu9RAV3/dfvrw83qIXLRB5JPsLr6SFmBiYLvWqZ9yHvxWtKtGL8eOMMO/3+JwD3xFg0IxjVoV3OaGQEkM5mLgHXIdeDIwp02LnygF6I8GdOUlEeI0BNUZucRlpnJQZSz4/BaJCff9ByQAKqvfG+afsg9pV791wmX4E0WIdSD+gA0ssOpeVG70TnL8bqVboe0AIACwFKl+LvaIE7PHP0pCy9F3HX/hLY7SMbm8RjN0KHCvaBM7Hlw2sPkXQ0JWZEyAK/2RYPHZ6u6eM0buhuH/73/OLeT4HPa3wfom8ZdSFnbSEtuFjqRZ1uDaAILIkl88quq6+xTlL/ArxaaE0Q6tkAm29VGkQ8v1yMkKtPg33WTJ9M+ixFor0YkIDT34BdLirKTw/hfkwhAXNXUOyQqJyDHchQ4TCrdU8D3CRDLeR3ogk1XqjRahjEaEewiytScU9X/bUZuzVYw1NLI/auVrpo5/qk+d+xIpzzg6TF397fxMSYT4QozF2mNb/CdjiEQ9K3kU/olGYaGK4+FdstkVu3OZU="
+
 matrix:
   include:
      # Linux
      - os: linux
        env:
          - NODE_VERSION="4.0.0"
-         - CB_VERSION="enterprise-4.0.0-rc0"
+         - CB_VERSION="enterprise-3.0.3"
      - os: linux
        env:
          - NODE_VERSION="3.3.0" # node abi 45
-         - CB_VERSION="enterprise-4.0.0-rc0"
-     - os: linux
-       env:
-         - NODE_VERSION="2.4.0" # node abi 44
-         - CB_VERSION="enterprise-4.0.0-rc0"
-     - os: linux
-       env:
-         - NODE_VERSION="1.8.4" # node abi 43
-         - CB_VERSION="enterprise-4.0.0-rc0"
+         - CB_VERSION="enterprise-3.0.3"
      - os: linux
        env:
          - NODE_VERSION="0.12.7" # node abi 14
          - CB_VERSION="enterprise-3.0.3"
      - os: linux
        env:
-         - NODE_VERSION="0.12.7" # node abi 14
-         - CB_VERSION="enterprise-4.0.0-rc0"
-     - os: linux
-       env:
          - NODE_VERSION="0.10.40" # node abi 11
-         - CB_VERSION="enterprise-4.0.0-rc0"
+         - CB_VERSION="enterprise-3.0.3"
      # OS X
      - os: osx
        env:
          - NODE_VERSION="4.0.0" # node abi 45
-         - CB_VERSION="enterprise-4.0.0-rc0"
+         - CB_VERSION="enterprise-3.0.3"
      - os: osx
        env:
          - NODE_VERSION="3.3.0" # node abi 45
-         - CB_VERSION="enterprise-4.0.0-rc0"
-     - os: osx
-       env:
-         - NODE_VERSION="2.4.0" # node abi 44
-         - CB_VERSION="enterprise-4.0.0-rc0"
-     - os: osx
-       env:
-         - NODE_VERSION="1.8.4" # node abi 43
-         - CB_VERSION="enterprise-4.0.0-rc0"
+         - CB_VERSION="enterprise-3.0.3"
      - os: osx
        env:
          - NODE_VERSION="0.12.7" # node abi 14
          - CB_VERSION="enterprise-3.0.3"
      - os: osx
        env:
-         - NODE_VERSION="0.12.7" # node abi 14
-         - CB_VERSION="enterprise-4.0.0-rc0"
-     - os: osx
-       env:
          - NODE_VERSION="0.10.40" # node abi 11
-         - CB_VERSION="enterprise-4.0.0-rc0"
+         - CB_VERSION="enterprise-3.0.3"
 
 before_install:
   - rm -rf ~/.nvm/ && git clone --depth 1 https://github.com/creationix/nvm.git ~/.nvm
@@ -80,8 +61,11 @@ before_install:
   - if [ $(uname -s) == 'Linux' ]; then docker exec -it $CB_ID couchbase-bootstrap bootstrap; fi;
 
 install:
+  - export PATH=./node_modules/.bin/:$PATH
   - npm install
+  - node-pre-gyp package testpackage
   - if [ $(uname -s) == 'Linux' ]; then make test; fi;
+  - if [[ $TRAVIS_TAG && ${TRAVIS_TAG-x} ]]; then node-pre-gyp publish; fi;
 
 script:
-  - echo "done"
+  - echo done

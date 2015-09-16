@@ -23,6 +23,7 @@ config.json
 /build/
 /node_modules/
 /docs/
+/lib/binding/
 /test/CouchbaseMock.jar
 builderror.log
 configcache.txt

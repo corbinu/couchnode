@@ -19,9 +19,14 @@
     "bindings": "~1.2.1",
     "jsonparse": "~1.0.0",
     "nan": "~2.0.8",
-    "request": "~2.61.0"
+    "request": "~2.61.0",
+    "node-pre-gyp": "^0.6.10"
   },
+  "bundledDependencies": [
+    "node-pre-gyp"
+  ],
   "devDependencies": {
+    "aws-sdk": "^2.2.0",
     "ink-docstrap": "git+https://github.com/brett19/docstrap.git#master",
     "istanbul": "~0.3.19",
     "jsdoc": "~3.3.2",
@@ -38,6 +43,13 @@
   },
   "scripts": {
     "test": "./node_modules/mocha/bin/mocha",
-    "install": "node-gyp rebuild"
+    "install": "node-pre-gyp install --fallback-to-build"
+  },
+  "binary": {
+    "module_name": "couchbase_impl",
+    "module_path": "./lib/binding/",
+    "host": "https://corbinu-couchnode.s3-us-east-1.amazonaws.com",
+    "remote_path": "./corbinu-couchbase/v{version}",
+    "package_name": "{node_abi}-{platform}-{arch}.tar.gz"
   }
 }
