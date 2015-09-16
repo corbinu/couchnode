@@ -7,8 +7,8 @@ services:
 
 env:
   global:
-    - secure: "Orcl5JXYdo+qGx7HYJs7SBc+bJzqmOdM5//r52GUgyCHTDVR5OijgLV+TopfjOQ/rb72gVub5KH1rXui3aNvYlMkdow7RX/3rdqI9o1cI8F/QWaUloi4juibwAodRharCFRTwcLOm7RW9kbgu3mqMUvpLpP1KOfjOkXIcp9Z94g6/mKFN4IWtTCCX2MEavkQrkjVBbmfLe2GZXGGsx0FDBnweDgwu0MXuOjJabA19UDLQCEGb9N9oGuWOGuu8cCVwlJij0IUJ06gDhMzVg6OUO3g6kf4OMRnaeJ3GWBsh7YgPKLdXwi5ssG241tPwfevHwCx7coughuDhpQtCJ7sLDrux6hVoXhaD8ryXfpeiPSHg2GY2eXHSlKnvK/6BE7dmVy6Cca6WIyWz/fvihaQN1S8LdrL6YoBR5LgBI4TO5OZNDxh6lxK6bLv0AQ+ExlL6FQ3rXp3l46MZC4UThRiD1EId7d6Pv0E1vtu0v7xEpf5yrH7oUJD5O1rrOmXwZcwkyjQy80Zmyu/ldiTAJ6gMrp4SNY+G/EM7DF8Qnt5ju1dAKk6hW4OvlK24YhPln1P0Wqyizcn5KLuyCkSTZp11eo75ZHWpUbaxjJfwnAJqjR1a69xOshUZPj8GFMsWq9MTM3U6sd9LgvPv0An8bq2bwCs7QoYa/8GmDbBEOrbobs="
-    - secure: "BKYcohWDtZ0hIfjkxEgPQnBoSjpZjly471kXSCBexbELaMquSMK85ED5hU6FFkM1LsWoI1iObDbvrEgqPJ6TvHsO5pYi1Q7nOG4vtucW/Tv7e7vqAR0D2/aYnPT/p+QP0CIHXvAtbcLwhW616/hsOUz4oPcTaFKcv0px4V6TOcN7J+sSoFNQT415dt+yjDS/JqKpLPSKCr0yU71lOvGYOGZ9IKeTpBqOAighC2BFHcUcWIh6OWZ2J5SymQHrR/zGYGcEZMaFsWoWrMuduV+Hrua6RZDj6rZiEv3dKoipi9UoSVP+BL40cIwTgdBDMu2FPQAxKOzLXwLDx8VLVd5tKfvciepfIuHohj28j69JV9vnYdiG7FpE9PEQ3q3SLTZjOuzOb6S3xBGuh3MeKutBWPZwhuVmUixY640m38/8e08o1ceWBl8nO2b+ODkXtk3KwAiN34QXgEK2qmoTYPiJVDEIgy4yRXgTepfWWYiV97C5o4w+oWP+P4RCGbD1QHiohH/ODlSPReWyCV+Ol2bYyWgnSE+covWRhUXzuLG0arecaM5gbaSXNRWbMaGDvUJFQFiQKdIGI861rV4QNDMWrq1F1sIzw+GPGZRR2rOjbCzw3AKLNfk44jnopIjJyYPAvIju0VhghmwsGKyBOhM7aFYxhnEpNs+2pYGwFlb32+c="
+    - secure: "X76FUL3vL1+1x1ojXr5Fu6OZUZXrgiFiOGRtlfUmptrV4h4cTT4xcPQU3Em/Fw+eWytj+0SIKcOsMm8DfPoBPPgY97euMxOA6m3bvbGhusjEZikOYyJa+aLXwFCmqalRt4xFXZqMNnCpxvKHvkiHTrLD72GjfhRhsR2rHNE9M8X7S3PUwgN5dFCwrceRawMXiDeY+jXf17w3g/GX5gz64orQyqg/iHSVFalxGP/QNzOzFaV3UGdIVZXaXBMGc25ha8qOsm1aTZSEYEnDm+cjpIy7+i3kFWphObZxkOKTTuXixvtueJ5wQqS9ikWpMNry0fKlQsfHMhYVHDJBxTayaryoZUSWCGsu6LbzV+VzuL1GxQ24PJoQvIYC47344yy9eZ1qfSKcNiU7v5ecjSLd2nDUDwe3SYrQQhGGzxBW/5fOKS++bkV+I8Py7ceLmmmdSxJeNdYSBRxeokCxncRwmIsj4RRlJWjMKeIzLMLsay7SbxOWJ0WO98M6rQoYOHpJnhDqt7trG3e6K/auu6tc1X8zGjlIUpHSG9fe5HOCj7rxmsp1bgLgFgvzGcMQp91/d4uMVysvQDjHz0Aix1iPCQSCpWLIUubzeJdIPLgnH08NFN8KymDmmvtYMMOrzRI/8mgRkViYMQ6c+caB4HUMMVvQA50Z8dgBlZK/Hk+OJdk="
+    - secure: "L9HSzsUDffoySqU5yjJUwsIb+yXjsly3FimkiGeM0QhZq6znrGep2JDqgnEZEZGhr0Lr1wuPaCH2Y080e7h+AsF09Vp8nrQKSu1i0F0BGUI9ltw54XbL9W6H8CjgJSKgPJzR4PzKgsYzTWHhESu9RAV3/dfvrw83qIXLRB5JPsLr6SFmBiYLvWqZ9yHvxWtKtGL8eOMMO/3+JwD3xFg0IxjVoV3OaGQEkM5mLgHXIdeDIwp02LnygF6I8GdOUlEeI0BNUZucRlpnJQZSz4/BaJCff9ByQAKqvfG+afsg9pV791wmX4E0WIdSD+gA0ssOpeVG70TnL8bqVboe0AIACwFKl+LvaIE7PHP0pCy9F3HX/hLY7SMbm8RjN0KHCvaBM7Hlw2sPkXQ0JWZEyAK/2RYPHZ6u6eM0buhuH/73/OLeT4HPa3wfom8ZdSFnbSEtuFjqRZ1uDaAILIkl88quq6+xTlL/ArxaaE0Q6tkAm29VGkQ8v1yMkKtPg33WTJ9M+ixFor0YkIDT34BdLirKTw/hfkwhAXNXUOyQqJyDHchQ4TCrdU8D3CRDLeR3ogk1XqjRahjEaEewiytScU9X/bUZuzVYw1NLI/auVrpo5/qk+d+xIpzzg6TF397fxMSYT4QozF2mNb/CdjiEQ9K3kU/olGYaGK4+FdstkVu3OZU="
 
 matrix:
   include:
@@ -61,10 +61,11 @@ before_install:
   - if [ $(uname -s) == 'Linux' ]; then docker exec -it $CB_ID couchbase-bootstrap bootstrap; fi;
 
 install:
+  - export PATH=./node_modules/.bin/:$PATH
   - npm install
-  - ./node_modules/.bin/node-pre-gyp package testpackage
+  - node-pre-gyp package testpackage
   - if [ $(uname -s) == 'Linux' ]; then make test; fi;
-  - ./node_modules/.bin/node-pre-gyp publish
+  - node-pre-gyp publish
 
 script:
   - echo done
