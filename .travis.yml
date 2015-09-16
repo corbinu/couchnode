@@ -65,7 +65,7 @@ install:
   - npm install
   - node-pre-gyp package testpackage
   - if [ $(uname -s) == 'Linux' ]; then make test; fi;
-  - node-pre-gyp publish
+  - if [[ $TRAVIS_TAG && ${TRAVIS_TAG-x} ]]; then node-pre-gyp publish; fi;
 
 script:
   - echo done
