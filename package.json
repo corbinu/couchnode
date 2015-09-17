@@ -3,7 +3,7 @@
   "engines": {
     "node": ">=0.10.0"
   },
-  "version": "2.1.5",
+  "version": "2.1.6",
   "keywords": [
     "couchbase",
     "libcouchbase",
