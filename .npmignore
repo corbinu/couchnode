@@ -1,1 +1,3 @@
 Makefile
+/lib/binding/
+/build/Release
