@@ -3,7 +3,7 @@
   "engines": {
     "node": ">=0.10.0"
   },
-  "version": "2.1.6",
+  "version": "2.1.7",
   "keywords": [
     "couchbase",
     "libcouchbase",
@@ -49,6 +49,7 @@
     "module_name": "couchbase_impl",
     "module_path": "./lib/binding/",
     "host": "https://couchnode.decimal.io",
+    "region": "us-east-1",
     "remote_path": "./v{version}",
     "package_name": "{node_abi}-{platform}-{arch}.tar.gz"
   }
