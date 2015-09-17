@@ -48,7 +48,7 @@
   "binary": {
     "module_name": "couchbase_impl",
     "module_path": "./lib/binding/",
-    "host": "https://corbinu-couchnode.s3-us-east-1.amazonaws.com",
+    "host": "http://corbinu-couchbase.s3-website-us-east-1.amazonaws.com",
     "remote_path": "./corbinu-couchbase/v{version}",
     "package_name": "{node_abi}-{platform}-{arch}.tar.gz"
   }
