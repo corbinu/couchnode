@@ -82,4 +82,4 @@ deploy:
   on:
     tags: true
     repo: corbinu/couchnode
-    condition: $NODE_VERSION = '4.0.0' && $(uname -s) == 'Linux'
+    condition: $NODE_VERSION = '4.0.0'
