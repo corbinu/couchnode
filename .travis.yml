@@ -7,7 +7,7 @@ services:
 
 env:
   global:
-  - secure: "UKNm/gvplelh+S4A4NDZVyMwCUrVDJiojCMYQW7DcAYnMRbX5aFnrYery5MlmiCzR4EOxGR3v9hoqvTedoEwuRy3MMCYYamSaTm7Tf0KFBz/ubCvAjpeMVXvOSvHEC06mJOEEewGcUTZDq6DuoAt9erRsUc9myqarx+VGoNB5czOlp6g26d07wCRCvdQV4wtCFMMPqdmJi4P2Xq8LxohSZ9sAnUXJ3y7yZ4fTW5djn+8SAdwe+IQPuJy/ph3lBlZ2Om95Cys/kW9CoM2pQFxWG+11h0prpKn2JaEX0R+QeU2ZPhf+CBzBcQi7Px+XXg55NZmkuImyoHvKh3YOP9qN/C3k/tkp59Y2H4CgB5qyre454hb9BxCHqpdsr/ks1CeFhcoxnrzzepcKcyL1pVnhXYOS1UeIm9IVo1/Q+WuRvkOB8kI97LkhpBUgXBLOWVUG90vLQeSJSVYlwkp30xVQYcJiXbjZ8MVeVqRZyO9RMPjcKpuekLtgDsIKIMzqUmYItaMtxwqW1t74nWPGqKE9Lze1LU3VPAb2D0gKHoyKIQg6wRN/gQ6c6KkNs5onlRtPfCpg+ZTN7RKScOYnRAhZsrfwP7/UYNbYgKDJF0hYc1qlT0z7cKZgKiTcbWJ0MnAuGXPwKZUi1W+NcygGjwcA/84dTpp7ZJKYqfthn61v64="
+  - secure: "Vf6gaQuFStHFCLVjTz8gKx6dKagptd8UlB7DcLqJRMqR/ANQ98QrEE7XRaM0YnHwHpYZGROLIuL3l59cz3QXabeykLf8hIjZo4MdwiqsPrFOjSY3pduLtleX+QeGRMAEagr1tXdAlCGxfsRHbSWnRGSVy6BWOvXg9HLHVnrtigXAx4qL4UDFIiLfPy0A9W5JP7BtnkoVIXtPnT2KryUnNekx2uyP3j5XBglTg/Z/+Kb/nt5LRLRCCrcTDraX/27swococYXznUna4KRbKRUJzAExfSCrwbEPdfaoWthkSoT/vQ/hHBGgRZIgAvquAXTrnM0EA9mUe8FI6hlyDDUQ231dAnO4LE3Iy4VGTzLn6xs2+KRVQPg8H0CwHNt70s6o0ljkJi/2AApscOq4aRZjWo43aFP/rlRD3nxYhEAlU1uKehJkrEwueTX+bY7EWjA97hksPrrhAE/3oU6XOWiToZD7KSpogrVQGqva8bCLouGaRCoynSdEsxEwav+1tA/UhFDvUP5hbYPmg+O8ntZUaJ2e7fmrYmWoGfs5FOguF2rTvhYXCu32act1BhnPMz+OWCwBpXbsBOdkf9xqCG/m7R+2jwK4wWcj5/dTUZURsDJMY/zeuhYuiSzpfeo6AgZX6RR9p+9ZTk3jdUWP1YLRmRo3wNL/c2HLuashKfOb+yQ="
 
 matrix:
   include:
@@ -66,7 +66,7 @@ install:
 - export PATH=./node_modules/.bin/:$PATH
 - npm install
 - if [ $(uname -s) == 'skip' ]; then make test; fi;
-- if [[ $TRAVIS_TAG && ${TRAVIS_TAG-x} ]]; then prebuld --target $NODE_VERSION --upload $GITHUB_TOKEN; fi;
+- if [[ $TRAVIS_TAG && ${TRAVIS_TAG-x} ]]; then prebuild --target $NODE_VERSION --upload $GITHUB_TOKEN; fi;
 
 script:
 - echo done
