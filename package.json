@@ -3,7 +3,7 @@
   "engines": {
     "node": ">=0.10.0"
   },
-  "version": "2.1.7",
+  "version": "2.1.8",
   "keywords": [
     "couchbase",
     "libcouchbase",
@@ -13,26 +13,23 @@
     "document"
   ],
   "main": "./lib/couchbase",
-  "license": "Apache2",
+  "license": "Apache-2.0",
   "name": "@corbinu/couchbase",
   "dependencies": {
-    "bindings": "~1.2.1",
-    "jsonparse": "~1.0.0",
-    "nan": "~2.0.8",
-    "request": "~2.61.0",
-    "node-pre-gyp": "^0.6.10"
+    "bindings": "^1.2.1",
+    "jsonparse": "^1.1.0",
+    "nan": "^2.0.8",
+    "qs": "^5.1.0",
+    "request": "^2.61.0",
+    "prebuild": "^2.3.0"
   },
-  "bundledDependencies": [
-    "node-pre-gyp"
-  ],
   "devDependencies": {
-    "aws-sdk": "^2.2.0",
     "ink-docstrap": "git+https://github.com/brett19/docstrap.git#master",
-    "istanbul": "~0.3.19",
-    "jsdoc": "~3.3.2",
-    "jsdoc-stability-tag": "~1.0.0",
-    "jshint": "~2.8.0",
-    "mocha": "~2.3.0"
+    "istanbul": "^0.3.19",
+    "jsdoc": "^3.3.2",
+    "jsdoc-stability-tag": "^1.0.0",
+    "jshint": "^2.8.0",
+    "mocha": "^2.3.0"
   },
   "repository": {
     "type": "git",
@@ -43,14 +40,6 @@
   },
   "scripts": {
     "test": "./node_modules/mocha/bin/mocha",
-    "install": "node-pre-gyp install --fallback-to-build"
-  },
-  "binary": {
-    "module_name": "couchbase_impl",
-    "module_path": "./lib/binding/",
-    "host": "https://couchnode.decimal.io",
-    "region": "us-east-1",
-    "remote_path": "./v{version}",
-    "package_name": "{node_abi}-{platform}-{arch}.tar.gz"
+    "install": "prebuild --download https://github.com/corbinu/couchnode/releases/download/v{version}/couchbase-v{version}-node-v{abi}-{platform}-{arch}.tar.gz"
   }
 }
