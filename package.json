@@ -20,13 +20,10 @@
     "jsonparse": "^1.1.0",
     "nan": "^2.0.8",
     "qs": "^4.0.0",
-    "request": "^2.61.0"
+    "request": "^2.61.0",
+    "prebuild": "^2.3.0"
   },
-  "bundledDependencies": [
-    "node-pre-gyp"
-  ],
   "devDependencies": {
-    "aws-sdk": "^2.2.0",
     "ink-docstrap": "git+https://github.com/brett19/docstrap.git#master",
     "istanbul": "^0.3.19",
     "jsdoc": "^3.3.2",
@@ -43,14 +40,6 @@
   },
   "scripts": {
     "test": "./node_modules/mocha/bin/mocha",
-    "install": "node-pre-gyp install --fallback-to-build"
-  },
-  "binary": {
-    "module_name": "couchbase_impl",
-    "module_path": "./lib/binding/",
-    "host": "https://couchnode.decimal.io",
-    "region": "us-east-1",
-    "remote_path": "./v{version}",
-    "package_name": "{node_abi}-{platform}-{arch}.tar.gz"
+    "install": "prebuild --download https://github.com/corbinu/couchnode/releases/download/v{version}/couchbase-v{version}-node-v{abi}-{platform}-{arch}.tar.gz"
   }
 }
