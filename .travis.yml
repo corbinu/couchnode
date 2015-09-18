@@ -66,6 +66,7 @@ install:
 - export PATH=./node_modules/.bin/:$PATH
 - npm install
 - if [ $(uname -s) == 'skip' ]; then make test; fi;
+- mkdir -p prebuilds/@corbinu
 - if [[ $TRAVIS_TAG && ${TRAVIS_TAG-x} ]]; then prebuild --target $NODE_VERSION --upload $GITHUB_TOKEN; fi;
 
 script:
