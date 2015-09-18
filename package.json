@@ -13,14 +13,15 @@
     "document"
   ],
   "main": "./lib/couchbase",
-  "license": "Apache2",
+  "license": "Apache-2.0",
   "name": "@corbinu/couchbase",
+  "name": "couchbase",
   "dependencies": {
     "bindings": "~1.2.1",
     "jsonparse": "~1.0.0",
     "nan": "~2.0.8",
-    "request": "~2.61.0",
-    "node-pre-gyp": "^0.6.10"
+    "qs": "~4.0.0",
+    "request": "~2.61.0"
   },
   "bundledDependencies": [
     "node-pre-gyp"
