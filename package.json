@@ -14,11 +14,7 @@
   ],
   "main": "./lib/couchbase",
   "license": "Apache-2.0",
-<<<<<<< HEAD
   "name": "@corbinu/couchbase",
-=======
->>>>>>> 7026d5d10f6b046dcda2a1b3cbf20ce23d694414
-  "name": "couchbase",
   "dependencies": {
     "bindings": "~1.2.1",
     "jsonparse": "~1.0.0",
