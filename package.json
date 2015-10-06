@@ -21,7 +21,7 @@
     "nan": "^2.0.8",
     "qs": "^5.1.0",
     "request": "^2.61.0",
-    "prebuild": "^2.3.0"
+    "prebuild": "^2.6.0"
   },
   "devDependencies": {
     "ink-docstrap": "git+https://github.com/brett19/docstrap.git#master",
@@ -39,7 +39,9 @@
     "unsafe-perm": true
   },
   "scripts": {
-    "test": "./node_modules/mocha/bin/mocha",
-    "install": "prebuild --download https://github.com/corbinu/couchnode/releases/download/v{version}/couchbase-v{version}-node-v{abi}-{platform}-{arch}.tar.gz"
+    "test": "mocha",
+    "install": "prebuild --download https://github.com/corbinu/couchnode/releases/download/v{version}/couchbase-v{version}-node-v{abi}-{platform}-{arch}.tar.gz",
+    "rebuild": "prebuild --compile",
+    "prebuild": "prebuild --verbose --strip"
   }
 }
