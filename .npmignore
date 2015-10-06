@@ -1,3 +1,14 @@
+*.tar.gz
+build/
+build-pre-gyp/
+coverage/
+benchmarks/
+docs/
+test/
+builderror.log
+README.md
+CONTRIBUTING.md
+AUTHORS
 Makefile
 /build/
 /prebuilds/
