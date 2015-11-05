@@ -13,6 +13,10 @@ matrix:
   include:
   - os: linux
     env:
+    - NODE_VERSION="5.0.0"
+    - CB_VERSION="enterprise-3.0.3"
+  - os: linux
+    env:
     - NODE_VERSION="4.1.0"
     - CB_VERSION="enterprise-3.0.3"
   - os: linux
@@ -26,6 +30,10 @@ matrix:
   - os: linux
     env:
     - NODE_VERSION="0.10.40"
+    - CB_VERSION="enterprise-3.0.3"
+  - os: osx
+    env:
+    - NODE_VERSION="5.0.0"
     - CB_VERSION="enterprise-3.0.3"
   - os: osx
     env:
