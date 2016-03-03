@@ -30,19 +30,16 @@ using namespace v8;
 class DefaultTranscoder
 {
 public:
-    static void Init();
+    static Local<Value> decodeJson(const void *bytes,
+            size_t nbytes);
+    static void encodeJson(CommandEncoder &enc, const void **bytes,
+            lcb_SIZE *nbytes, Local<Value> value);
 
-    DefaultTranscoder() {
-    }
-
-    ~DefaultTranscoder() {
-    }
-
-    static Handle<Value> decode(const void *bytes,
+    static Local<Value> decode(const void *bytes,
             size_t nbytes, lcb_U32 flags);
-    void encode(const void **bytes, lcb_SIZE *nbytes,
+    static void encode(CommandEncoder &enc,
+            const void **bytes, lcb_SIZE *nbytes,
             lcb_U32 *flags, Local<Value> value);
-
 
 };
 

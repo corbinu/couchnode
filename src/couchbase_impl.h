@@ -54,11 +54,12 @@
 #include <libcouchbase/api3.h>
 #include <libcouchbase/views.h>
 #include <libcouchbase/n1ql.h>
-#include <libcouchbase/configuration.h>
 
 #include "cas.h"
-#include "transcoder.h"
+#include "token.h"
 #include "exception.h"
+#include "cmdencoder.h"
+#include "transcoder.h"
 
 #if LCB_VERSION < 0x020503
 #error "Couchnode requires libcouchbase >= 2.5.3"
@@ -123,6 +124,8 @@ public:
     static NAN_METHOD(fnDurability);
     static NAN_METHOD(fnViewQuery);
     static NAN_METHOD(fnN1qlQuery);
+    static NAN_METHOD(fnLookupIn);
+    static NAN_METHOD(fnMutateIn);
 
 public:
     CouchbaseImpl(lcb_t inst);
@@ -137,7 +140,7 @@ public:
 
 
     Handle<Value> decodeDoc(const void *bytes, size_t nbytes, lcb_U32 flags);
-    void encodeDoc(DefaultTranscoder& transcoder, const void **,
+    bool encodeDoc(CommandEncoder& enc, const void **,
             lcb_SIZE *nbytes, lcb_U32 *flags, Local<Value> value);
 
 protected:
@@ -163,6 +166,8 @@ public:
     static Nan::Persistent<String> geometryKey;
     static Nan::Persistent<String> rowsKey;
     static Nan::Persistent<String> resultsKey;
+    static Nan::Persistent<String> tokenKey;
+    static Nan::Persistent<String> errorKey;
 
 };
 
