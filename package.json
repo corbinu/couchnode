@@ -38,8 +38,7 @@
   },
   "scripts": {
     "test": "mocha",
-    "install": "prebuild --download https://github.com/corbinu/couchnode/releases/download/v{version}/couchbase-v{version}-node-v{abi}-{platform}-{arch}.tar.gz",
-    "rebuild": "prebuild --compile",
+    "install": "prebuild --install https://github.com/corbinu/couchnode/releases/download/v{version}/couchbase-v{version}-node-v{abi}-{platform}-{arch}.tar.gz",
     "prebuild": "prebuild -b 4.3.0 -b 5.7.0"
   }
 }
