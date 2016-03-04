@@ -38,7 +38,7 @@
   },
   "scripts": {
     "test": "mocha",
-    "install": "prebuild --install",
-    "prebuild": "prebuild -b 4.3.0 -b 5.7.0 --strip --verbose"
+    "install": "prebuild --download",
+    "prebuild": "prebuild --strip --verbose"
   }
 }
