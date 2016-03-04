@@ -119,14 +119,20 @@ Handle<Value> CouchbaseImpl::decodeDoc(
     return DefaultTranscoder::decode(bytes, nbytes, flags);
 }
 
-void CouchbaseImpl::encodeDoc(DefaultTranscoder& transcoder, const void **bytes,
+bool CouchbaseImpl::encodeDoc(CommandEncoder& enc, const void **bytes,
         lcb_SIZE *nbytes, lcb_U32 *flags, Local<Value> value) {
     // There must never be a NanScope here, the system relies on the fact
     //   that the scope will exist until the lcb_cmd_XXX_t object has been
     //   passed to LCB already.
     if (transEncodeFunc) {
         Local<Value> args[] = { value };
-        Handle<Value> res = transEncodeFunc->Call(1, args);
+        Nan::TryCatch tryCatch;
+        Handle<Value> res = transEncodeFunc->GetFunction()->
+                CallAsFunction(Nan::GetCurrentContext()->Global(), 1, args);
+        if (tryCatch.HasCaught()) {
+            tryCatch.ReThrow();
+            return false;
+        }
         if (!res.IsEmpty() && res->IsObject()) {
             Handle<Object> encObj = res.As<Object>();
             Handle<Value> flagsObj = encObj->Get(Nan::New(flagsKey));
@@ -136,12 +142,13 @@ void CouchbaseImpl::encodeDoc(DefaultTranscoder& transcoder, const void **bytes,
                     *nbytes = node::Buffer::Length(valueObj);
                     *bytes = node::Buffer::Data(valueObj);
                     *flags = flagsObj->Uint32Value();
-                    return;
+                    return true;
                 }
             }
         }
     }
-    transcoder.encode(bytes, nbytes, flags, value);
+    DefaultTranscoder::encode(enc, bytes, nbytes, flags, value);
+    return true;
 }
 
 template<typename T>
@@ -178,6 +185,7 @@ void _DispatchArithCallback(lcb_t instance, const void *cookie, lcb_error_t erro
     if (!error) {
         Local<Object> resObj = Nan::New<Object>();
         resObj->Set(Nan::New(me->casKey), Cas::CreateCas(resp->v.v0.cas));
+        resObj->Set(Nan::New(me->tokenKey), MutationToken::CreateToken(resp->v.v0.mutation_token));
         resObj->Set(Nan::New(me->valueKey), Nan::New<Number>(resp->v.v0.value));
         resVal = resObj;
     } else {
@@ -212,6 +220,29 @@ void _DispatchBasicCallback(lcb_t instance, const void *cookie, lcb_error_t erro
     delete callback;
 }
 
+template<typename T>
+void _DispatchStoreCallback(lcb_t instance, const void *cookie, lcb_error_t error, const T *resp) {
+    CouchbaseImpl *me = (CouchbaseImpl *)lcb_get_cookie(instance);
+    Nan::Callback *callback = (Nan::Callback*)cookie;
+    Nan::HandleScope scope;
+
+    Local<Value> errObj = Error::create(error);
+    Local<Value> resVal;
+    if (!error) {
+        Local<Object> resObj = Nan::New<Object>();
+        resObj->Set(Nan::New(me->casKey), Cas::CreateCas(resp->v.v0.cas));
+        resObj->Set(Nan::New(me->tokenKey), MutationToken::CreateToken(resp->v.v0.mutation_token));
+        resVal = resObj;
+    } else {
+        resVal = Nan::Null();
+    }
+
+    Local<Value> args[] = { errObj, resVal };
+    callback->Call(2, args);
+
+    delete callback;
+}
+
 void _DispatchErrorCallback(lcb_t instance, const void *cookie, lcb_error_t error) {
     Nan::Callback *callback = (Nan::Callback*)cookie;
     Nan::HandleScope scope;
@@ -220,6 +251,24 @@ void _DispatchErrorCallback(lcb_t instance, const void *cookie, lcb_error_t erro
     Local<Value> resVal = Nan::Null();
 
     Local<Value> args[] = { errObj, resVal };
+    callback->Call(2, args);
+
+    delete callback;
+}
+
+template<typename T>
+void _DispatchValueCallback3(lcb_t instance, const lcb_RESPBASE *respbase) {
+    CouchbaseImpl *me = (CouchbaseImpl *)lcb_get_cookie(instance);
+    const T *resp = (const T*)respbase;
+    Nan::Callback *callback = (Nan::Callback*)resp->cookie;
+    Nan::HandleScope scope;
+
+    Local<Value> errObj = Error::create(LCB_SUCCESS);
+    Local<Object> resObj = Nan::New<Object>();
+    resObj->Set(Nan::New(me->casKey), Cas::CreateCas(resp->cas));
+    resObj->Set(Nan::New(me->valueKey), me->decodeDoc(resp->value, resp->nvalue, resp->itmflags));
+
+    Local<Value> args[] = { errObj, resObj };
     callback->Call(2, args);
 
     delete callback;
@@ -242,7 +291,7 @@ static void get_callback(lcb_t instance, const void *cookie,
 static void store_callback(lcb_t instance, const void *cookie, lcb_storage_t,
         lcb_error_t error, const lcb_store_resp_t *resp)
 {
-    _DispatchBasicCallback(instance, cookie, error, resp);
+    _DispatchStoreCallback(instance, cookie, error, resp);
 }
 
 static void arithmetic_callback(lcb_t instance, const void *cookie,
@@ -254,8 +303,7 @@ static void arithmetic_callback(lcb_t instance, const void *cookie,
 static void remove_callback(lcb_t instance, const void *cookie,
         lcb_error_t error, const lcb_remove_resp_t *resp)
 {
-    _DispatchBasicCallback(instance, cookie, error, resp);
-
+    _DispatchStoreCallback(instance, cookie, error, resp);
 }
 
 static void touch_callback(lcb_t instance, const void *cookie,
@@ -407,6 +455,78 @@ void n1qlrow_callback(lcb_t instance, int ignoreme,
     callback->Call(2, args);
 }
 
+static void
+subdoc_callback(lcb_t instance, int cbtype, const lcb_RESPBASE *respbase)
+{
+    CouchbaseImpl *me = (CouchbaseImpl *)lcb_get_cookie(instance);
+    const lcb_RESPSUBDOC *resp = (const lcb_RESPSUBDOC*)respbase;
+    Nan::Callback *callback = (Nan::Callback*)resp->cookie;
+    Nan::HandleScope scope;
+    std::vector<lcb_SDENTRY> results;
+    Local<Array> outArr;
+    Local<Object> outObj;
+    int errorCount = 0;
+
+    Local<Function> jsonParseLcl = Nan::New(CouchbaseImpl::jsonParse);
+
+    if (resp->rc != LCB_SUCCESS && resp->rc != LCB_SUBDOC_MULTI_FAILURE) {
+        Local<Value> errObj = Error::create(resp->rc);
+        callback->Call(1, &errObj);
+        return;
+    }
+
+    {
+        lcb_SDENTRY respitem;
+        for (size_t iter = 0; lcb_sdresult_next(resp, &respitem, &iter) != 0; ) {
+            results.push_back(respitem);
+        }
+    }
+
+    outObj = Nan::New<Object>();
+    outObj->Set(Nan::New(me->casKey), Cas::CreateCas(resp->cas));
+
+    // Create an array of the correct size
+    outArr = Nan::New<Array>(results.size());
+    outObj->Set(Nan::New(me->resultsKey), outArr);
+
+    for (size_t i = 0; i < results.size(); ++i) {
+        lcb_SDENTRY respitem = results[i];
+        Local<Object> resObj = Nan::New<Object>();
+
+        if (cbtype == LCB_CALLBACK_SDMUTATE) {
+            resObj->Set(Nan::New(me->idKey), Nan::New(respitem.index));
+        } else {
+            resObj->Set(Nan::New(me->idKey), Nan::New((uint8_t)i));
+        }
+
+        if (respitem.status != LCB_SUCCESS) {
+            errorCount++;
+
+            Local<Value> errObj = Error::create(respitem.status);
+            resObj->Set(Nan::New(me->errorKey), errObj);
+        } else {
+            if (respitem.nvalue > 0) {
+                Handle<Value> valueStr =
+                        Nan::New<String>((const char*)respitem.value, (int)respitem.nvalue).ToLocalChecked();
+                Local<Value> valueObj =
+                        jsonParseLcl->Call(Nan::GetCurrentContext()->Global(), 1, &valueStr);
+                resObj->Set(Nan::New(me->valueKey), valueObj);
+            } else {
+                resObj->Set(Nan::New(me->valueKey), Nan::Null());
+            }
+        }
+
+        outArr->Set(i, resObj);
+    }
+
+    Local<Value> args[] = {
+            Nan::New<Number>(errorCount),
+            outObj};
+    callback->Call(2, args);
+
+    delete callback;
+}
+
 }
 
 void CouchbaseImpl::setupLibcouchbaseCallbacks(void)
@@ -420,4 +540,7 @@ void CouchbaseImpl::setupLibcouchbaseCallbacks(void)
     lcb_set_touch_callback(instance, touch_callback);
     lcb_set_unlock_callback(instance, unlock_callback);
     lcb_set_durability_callback(instance, durability_callback);
+
+    lcb_install_callback3(instance, LCB_CALLBACK_SDLOOKUP, subdoc_callback);
+    lcb_install_callback3(instance, LCB_CALLBACK_SDMUTATE, subdoc_callback);
 }
