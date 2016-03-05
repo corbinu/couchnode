@@ -41,7 +41,7 @@ install:
 - npm install
 - if [ $(uname -s) == 'skip' ]; then make test; fi;
 - mkdir -p prebuilds/@corbinu
-- if [[ $TRAVIS_BRANCH" = "master" ]]; then prebuild --upload $GITHUB_TOKEN -b 5.6.0 -b 4.3.0; fi;
+- if [[ "$TRAVIS_BRANCH" = "master" ]]; then prebuild --upload $GITHUB_TOKEN -b 5.6.0 -b 4.3.0; fi;
 
 script:
 - echo done
