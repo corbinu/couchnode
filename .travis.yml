@@ -41,7 +41,7 @@ install:
 - npm install
 - if [ $(uname -s) == 'skip' ]; then make test; fi;
 - mkdir -p prebuilds/@corbinu
-- if [[ $TRAVIS_TAG && ${TRAVIS_TAG-x} ]]; then prebuild --upload $GITHUB_TOKEN -b 5.6.0 -b 4.3.0; fi;
+- if [[ $TRAVIS_BRANCH" = "master" ]]; then prebuild --upload $GITHUB_TOKEN -b 5.6.0 -b 4.3.0; fi;
 
 script:
 - echo done
@@ -52,6 +52,6 @@ deploy:
   api_key:
     secure: fYC1h6YaEcHeHPPJgxMA9DfFp+OBpq9x1NXpXiueqHtihDGXO23WK5MCTqKmuh52lIr+G0Sr9QcF0fXbKzH4qzN38+awbQNaj/uVi3uVDZheeqRRUJquu9prMEv9m6rNyxt4T1KjjRyPL9URgkkUHu3T/zKAsHPgYCr34OIqRGRlKsIKGRRoFYCrHYOd5z216ALQfdnxgWLjE8aZo50mwbPR+hl2FR7AlBpdOS5FmbTijS2JpQZweVq62G6cGj3X2womwKUiO8CarU1rZiAoGfF6dZPMnoTIN2EUI5T1pOM389sKnUsR+K/x80hIo8SO1aOehMavzbvPi5F8pSeWyW3ga/P81y0CGSZnU5ZZNXAAdv6EGT8PfFK8nWxRjSXX4ti8mx3U9rA5cHYkcBs23yjgG5/r1DLJFgiwpoLGGK8TqKNcnPyyqUQsIuo3cSqen9rK7Doyd0J4U/bbqEZRqGZOIZ2pzSw85+KKtZDecuQ0ZPvAWTR4Z+IoAG/J3/8Nht9VWAKa/7x8cb/uaUIASGHDnGneLcx7MCunJ6Z8q8RGOYFIZ78KtGMEi4Nj9UJTep5Ou+i56e+myHUf2RvoYoky5W9tEDVz/70NM+Hr2E91vgEAM3q7XwohCb0rWjShu6IhcBfZJ1dnkKBdlWAkcvKDiGS6QWBhBgN73TlPVhk=
   on:
-    tags: true
+    branch: master
     repo: corbinu/couchnode
-    condition: $NODE_VERSION = '5.6.0'
+    condition: $(uname -s) == 'skip'
