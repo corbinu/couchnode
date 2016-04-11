@@ -1,9 +1,9 @@
 {
   "description": "The unofficial Couchbase Node.js Client Library.",
   "engines": {
-    "node": ">=0.10.40"
+    "node": ">=4.0.0"
   },
-  "version": "2.1.21",
+  "version": "2.1.22",
   "keywords": [
     "couchbase",
     "libcouchbase",
