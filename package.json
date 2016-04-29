@@ -3,7 +3,7 @@
   "engines": {
     "node": ">=4.0.0"
   },
-  "version": "2.1.22",
+  "version": "2.1.23",
   "keywords": [
     "couchbase",
     "libcouchbase",
@@ -18,7 +18,7 @@
   "dependencies": {
     "bindings": "^1.2.1",
     "nan": "^2.0.8",
-    "prebuild": "^4.1.0",
+    "@corbinu/prebuild": "^4.2.3",
     "request": "^2.61.0"
   },
   "devDependencies": {
