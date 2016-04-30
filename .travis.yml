@@ -1,12 +1,8 @@
 sudo: required
-
 dist: trusty
-
 language: cpp
-
 services:
 - docker
-
 matrix:
   include:
   - os: linux
@@ -24,29 +20,35 @@ before_install:
 - nvm install $NODE_VERSION
 - nvm use $NODE_VERSION
 - npm install -g json
-- if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then docker pull corbinu/couchbase-test:$CB_VERSION; docker pull corbinu/alpine-node-builder; fi;
-- if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then export CB_ID=$(docker run -d -p 8091:8091 --env BUCKET=default corbinu/couchbase-test:$CB_VERSION); fi;
-- if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then CBRES=0; while [ $CBRES != 1 ]; do echo -n '.'; R=$(docker inspect $CB_ID | json -a State.Running); if [ "$R" == "true" ]; then let CBRES=1; else sleep 1.3; fi; done; fi;
-- if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then export CB_IP=$(docker inspect --format '{{ .NetworkSettings.IPAddress}}' $CB_ID); fi;
-- if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then export CNCSTR="http://$CB_IP:8091/"; fi;
-- if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then docker exec -it $CB_ID couchbase-bootstrap bootstrap; fi;
-
+- if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then docker pull corbinu/couchbase-test:$CB_VERSION;
+  docker pull corbinu/alpine-node-builder; fi;
+- if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then export CB_ID=$(docker run -d -p 8091:8091
+  --env BUCKET=default corbinu/couchbase-test:$CB_VERSION); fi;
+- if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then CBRES=0; while [ $CBRES != 1 ]; do echo
+  -n '.'; R=$(docker inspect $CB_ID | json -a State.Running); if [ "$R" == "true"
+  ]; then let CBRES=1; else sleep 1.3; fi; done; fi;
+- if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then export CB_IP=$(docker inspect --format
+  '{{ .NetworkSettings.IPAddress}}' $CB_ID); fi;
+- if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then export CNCSTR="http://$CB_IP:8091/";
+  fi;
+- if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then docker exec -it $CB_ID couchbase-bootstrap
+  bootstrap; fi;
 install:
 - export PATH=./node_modules/.bin/:$PATH
 - npm install
 - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then make test; fi;
 - mkdir -p prebuilds/@corbinu
-- if [[ "$TRAVIS_BRANCH" = "master" ]]; then prebuild --upload $GITHUB_TOKEN -b 6.0.0 -b 5.6.0 -b 4.3.0; fi;
-- if [[ "$TRAVIS_BRANCH" = "master" ]]; then if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then docker run -t --volume "$(pwd):/install" corbinu/alpine-node-builder prebuild --libc=musl --upload $GITHUB_TOKEN -b 6.0.0 -b 5.6.0 -b 4.3.0; fi; fi;
-
+- if [[ "$TRAVIS_BRANCH" = "master" ]]; then prebuild --upload $GITHUB_TOKEN -b 6.0.0
+  -b 5.6.0 -b 4.3.0; fi;
+- if [[ "$TRAVIS_BRANCH" = "master" ]]; then if [[ "$TRAVIS_OS_NAME" == "linux" ]];
+  then docker run -t --volume "$(pwd):/install" corbinu/alpine-node-builder prebuild
+  --libc=musl --upload $GITHUB_TOKEN -b 6.0.0 -b 5.6.0 -b 4.3.0; fi; fi;
 script:
 - echo done
-
 deploy:
   provider: npm
-  email: corbinu@openswimsoftware.com
   api_key:
-    secure: fYC1h6YaEcHeHPPJgxMA9DfFp+OBpq9x1NXpXiueqHtihDGXO23WK5MCTqKmuh52lIr+G0Sr9QcF0fXbKzH4qzN38+awbQNaj/uVi3uVDZheeqRRUJquu9prMEv9m6rNyxt4T1KjjRyPL9URgkkUHu3T/zKAsHPgYCr34OIqRGRlKsIKGRRoFYCrHYOd5z216ALQfdnxgWLjE8aZo50mwbPR+hl2FR7AlBpdOS5FmbTijS2JpQZweVq62G6cGj3X2womwKUiO8CarU1rZiAoGfF6dZPMnoTIN2EUI5T1pOM389sKnUsR+K/x80hIo8SO1aOehMavzbvPi5F8pSeWyW3ga/P81y0CGSZnU5ZZNXAAdv6EGT8PfFK8nWxRjSXX4ti8mx3U9rA5cHYkcBs23yjgG5/r1DLJFgiwpoLGGK8TqKNcnPyyqUQsIuo3cSqen9rK7Doyd0J4U/bbqEZRqGZOIZ2pzSw85+KKtZDecuQ0ZPvAWTR4Z+IoAG/J3/8Nht9VWAKa/7x8cb/uaUIASGHDnGneLcx7MCunJ6Z8q8RGOYFIZ78KtGMEi4Nj9UJTep5Ou+i56e+myHUf2RvoYoky5W9tEDVz/70NM+Hr2E91vgEAM3q7XwohCb0rWjShu6IhcBfZJ1dnkKBdlWAkcvKDiGS6QWBhBgN73TlPVhk=
+    secure: DYA5VWbrYp9GG4zp/inkLtCvq6Vpj6VUXbXFopKwndIZM5BmA4aJRVXw4IM4gHx/gJ1b7T73JrDpbC7V6Z4Uou8e89YgHWsdZRui3Y3kfuoJ7QLiX8mGKzRlAZEIDPdd0NyWn1eCuHQKE6qavSXgS3b/TZ+LY9XDJ0I4gvbZlFYNo5HzLsAsjjQXxDXGX7zR27Q9XJ0S2yYodLOK++AEhVKHGspfbhNOY/p6OHDvMkYfr88kC12ZRt2eduY2etQ4MBlAt1lepwexPanD26Y3YcVO15ODCvDzzmTJquH90iHMXu2OkagFAXDLFKDPANHOqr0agmF6hkmDrJqeRVNsyfh5MdNvjdUAlBcCeeas1Ya31YR9HEjwhVdSjOAiiThPj4ReRQYAzapR0L8iVhR94x5ewUi96GlW3PpzSZaBbaVC+rjVrgzeZsuzmMXlrjr34b5QCr4VFjKGl39O/jaY+wozUuzgcQiHOUucMYSJArF3mUEGOFzWdtlWX+CGJMRUmOdN/j0wj+U442mAKY0ZsAomdvtTC6LvIjjJn/XCihwkoDHlrdhiuPnLnL1+bJOtYAltxIe97+qjgMokNMG8Vg5AbSKbRVm+CsVe5iTXwx9QVI9eA60Lf6v68mkiOiZ9TZRfQojcCEzpVBd1m1pzBsIO1XCpFxyxiQpBb43rXQs=
   on:
     repo: corbinu/couchnode
     condition: $TRAVIS_OS_NAME == "linux"
