@@ -18,7 +18,7 @@
   "dependencies": {
     "bindings": "^1.2.1",
     "nan": "^2.0.8",
-    "prebuild": "^4.2.3",
+    "prebuild": "^4.1.2",
     "request": "^2.61.0"
   },
   "devDependencies": {
