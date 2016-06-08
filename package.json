@@ -3,7 +3,7 @@
   "engines": {
     "node": ">=4.0.0"
   },
-  "version": "2.1.26",
+  "version": "2.1.27",
   "keywords": [
     "couchbase",
     "libcouchbase",
@@ -18,7 +18,7 @@
   "dependencies": {
     "bindings": "^1.2.1",
     "nan": "^2.0.8",
-    "@corbinu/prebuild": "^4.2.3",
+    "prebuild": "^4.1.2",
     "request": "^2.61.0"
   },
   "devDependencies": {
@@ -37,8 +37,9 @@
     "unsafe-perm": true
   },
   "scripts": {
+    "install": "prebuild --install",
     "test": "mocha",
-    "install": "prebuild --download",
-    "prebuild": "prebuild --strip --verbose"
+    "rebuild": "prebuild --compile",
+    "prebuild": "prebuild --verbose --strip"
   }
 }
