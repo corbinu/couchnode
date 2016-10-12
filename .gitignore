@@ -17,6 +17,8 @@ config.json
 # The original file after running astyle:
 *.orig
 
+.DS_Store
+
 *~
 
 /.lock-wscript

@@ -215,11 +215,13 @@ Connspec::parse_options(
                 if (m_flags & F_SSLSCHEME) {
                     SET_ERROR("SSL scheme specified, but ssl=off found in options");
                 }
-                m_sslopts = static_cast<lcb_SSLOPTS>(0);
+                m_sslopts &= (~LCB_SSL_ENABLED);
             } else if (!strcmp(value, "on")) {
-                m_sslopts = LCB_SSL_ENABLED;
+                m_sslopts |= LCB_SSL_ENABLED;
             } else if (!strcmp(value, "no_verify")) {
-                m_sslopts = static_cast<lcb_SSLOPTS>(LCB_SSL_ENABLED|LCB_SSL_NOVERIFY);
+                m_sslopts |= LCB_SSL_ENABLED|LCB_SSL_NOVERIFY;
+            } else if (!strcmp(value, "no_global_init")) {
+                m_sslopts |= LCB_SSL_NOGLOBALINIT;
             } else {
                 SET_ERROR("Invalid value for 'ssl'. Choices are on, off, and no_verify");
             }
@@ -328,6 +330,9 @@ Connspec::parse(const char *connstr_, const char **errmsg)
             if (!strcodecs::urldecode(m_bucket)) {
                 SET_ERROR("Couldn't decode bucket string");
             }
+        }
+        if (m_bucket.empty()) {
+            SET_ERROR("Bucket name is set to empty");
         }
     } else if (bucket_s == NULL) {
         m_bucket = "default";

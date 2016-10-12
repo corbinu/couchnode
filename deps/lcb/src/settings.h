@@ -106,6 +106,7 @@ typedef struct lcb_settings_st {
     lcb_U16 iid;
     lcb_U8 compressopts;
     lcb_U8 syncmode;
+    lcb_U32 read_chunk_size;
     lcb_U32 operation_timeout;
     lcb_U32 views_timeout;
     lcb_U32 http_timeout;
@@ -144,7 +145,7 @@ typedef struct lcb_settings_st {
     unsigned keep_guess_vbs : 1;
     unsigned fetch_mutation_tokens : 1;
     unsigned dur_mutation_tokens : 1;
-    unsigned sslopts : 2;
+    unsigned sslopts : 3;
     unsigned ipv6 : 2;
     unsigned tcp_nodelay : 1;
     unsigned readj_ts_wait : 1;
