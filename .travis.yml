@@ -8,11 +8,11 @@ matrix:
   - os: linux
     env:
     - OS="Linux"
-    - NODE_VERSION="5.6.0"
+    - NODE_VERSION="6.9.0"
     - CB_VERSION="enterprise-4.5.1"
   - os: osx
     env:
-    - NODE_VERSION="5.6.0"
+    - NODE_VERSION="6.9.0"
     - CB_VERSION="enterprise-4.5.1"
 before_install:
 - rm -rf ~/.nvm/ && git clone --depth 1 https://github.com/creationix/nvm.git ~/.nvm
@@ -42,7 +42,7 @@ install:
   -b 5.6.0 -b 4.3.0; fi;
 - if [[ "$TRAVIS_BRANCH" = "master" ]]; then if [[ "$TRAVIS_OS_NAME" == "linux" ]];
   then docker run -t --volume "$(pwd):/install" corbinu/alpine-node-builder prebuild
-  --libc=musl --upload $GITHUB_TOKEN -b 6.0.0 -b 5.6.0 -b 4.3.0; fi; fi;
+  --libc=musl --upload $GITHUB_TOKEN -b 7.0.0 -b 6.9.1 -b 4.6.1; fi; fi;
 script:
 - echo done
 deploy:
