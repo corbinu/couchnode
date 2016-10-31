@@ -38,8 +38,7 @@ install:
 - npm install
 - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then make test; fi;
 - mkdir -p prebuilds/@corbinu
-- if [[ "$TRAVIS_BRANCH" = "master" ]]; then prebuild --upload $GITHUB_TOKEN -b 6.0.0
-  -b 5.6.0 -b 4.3.0; fi;
+- if [[ "$TRAVIS_BRANCH" = "master" ]]; then prebuild --upload $GITHUB_TOKEN -b 7.0.0 -b 6.9.1 -b 4.6.1; fi;
 - if [[ "$TRAVIS_BRANCH" = "master" ]]; then if [[ "$TRAVIS_OS_NAME" == "linux" ]];
   then docker run -t --volume "$(pwd):/install" corbinu/alpine-node-builder prebuild
   --libc=musl --upload $GITHUB_TOKEN -b 7.0.0 -b 6.9.1 -b 4.6.1; fi; fi;
