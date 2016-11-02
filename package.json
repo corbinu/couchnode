@@ -3,7 +3,7 @@
     "engines": {
         "node": ">=4.0.0"
     },
-    "version": "2.2.3",
+    "version": "2.2.4",
     "keywords": [
         "couchbase",
         "libcouchbase",
@@ -16,11 +16,13 @@
     "license": "Apache-2.0",
     "name": "@corbinu/couchbase",
     "dependencies": {
+        "@types/node": "^6.0.46",
         "bindings": "^1.2.1",
         "nan": "^2.0.8",
         "prebuild": "^4.1.2",
         "request": "^2.61.0"
     },
+    "typings": "index",
     "devDependencies": {
         "ink-docstrap": "git+https://github.com/brett19/docstrap.git#master",
         "istanbul": "^0.4.2",
