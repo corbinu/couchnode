@@ -22,7 +22,7 @@
         "prebuild": "^4.1.2",
         "request": "^2.61.0"
     },
-    "typings": "index",
+    "typings": "couchbase",
     "devDependencies": {
         "ink-docstrap": "git+https://github.com/brett19/docstrap.git#master",
         "istanbul": "^0.4.2",
