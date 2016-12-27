@@ -87,16 +87,16 @@ describe('#datastructures', function () {
       }));
     });
 
-    it('should push/shift correctly', function(done) {
+    it('should append/prepend correctly', function(done) {
       var itemArray = [
           'one'
       ];
 
-      H.b.upsert('listPushShift', itemArray, H.okCallback(function() {
-        H.b.listPush('listPushShift', 'two', H.okCallback(function() {
-          H.b.listShift('listPushShift', 'three', H.okCallback(function() {
+      H.b.upsert('listAppendPrepend', itemArray, H.okCallback(function() {
+        H.b.listAppend('listAppendPrepend', 'two', H.okCallback(function() {
+          H.b.listPrepend('listAppendPrepend', 'three', H.okCallback(function() {
 
-            H.b.get('listPushShift', H.okCallback(function (res) {
+            H.b.get('listAppendPrepend', H.okCallback(function (res) {
               assert(res.value.length === 3);
               assert(res.value[0] === 'three');
               assert(res.value[2] === 'two');
@@ -218,6 +218,65 @@ describe('#datastructures', function () {
         }));
       }));
     });
+  });
 
+  describe('#queue', function () {
+    it('should get size correctly', function(done) {
+      var itemArray = [
+        'one',
+        'two',
+        'three',
+        'four'
+      ];
+
+      H.b.upsert('queueSize', itemArray, H.okCallback(function() {
+        H.b.listSize('queueSize', H.okCallback(function(res) {
+          assert(res.value === 4);
+
+          done();
+        }));
+      }));
+    });
+
+    it('should push correctly', function(done) {
+      var itemArray = [
+        'one',
+        'two'
+      ];
+
+      H.b.upsert('queuePush', itemArray, H.okCallback(function() {
+        H.b.queuePush('queuePush', 'three', H.okCallback(function() {
+
+          H.b.get('queuePush', H.okCallback(function (res) {
+            assert(res.value.length === 3);
+            assert(res.value[0] === 'three');
+
+            done();
+          }));
+        }));
+      }));
+    });
+
+    it('should pop correctly', function(done) {
+      var itemArray = [
+        'one',
+        'two',
+        'three'
+      ];
+
+      H.b.upsert('queuePop', itemArray, H.okCallback(function() {
+        H.b.queuePop('queuePop', H.okCallback(function(res) {
+          assert(res.value === 'three');
+
+          H.b.get('queuePop', H.okCallback(function(res) {
+            assert(res.value.length === 2);
+            assert(res.value[0] === 'one');
+            assert(res.value[1] === 'two');
+
+            done();
+          }));
+        }));
+      }));
+    });
   });
 });
