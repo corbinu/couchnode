@@ -16,10 +16,10 @@
     "license": "Apache-2.0",
     "name": "@corbinu/couchbase",
     "dependencies": {
-        "@types/node": "^0.0.2",
+        "@types/node": "^6.0.52",
         "bindings": "^1.2.1",
         "nan": "^2.0.8",
-        "prebuild": "^4.1.2",
+        "prebuild": "^5.1.2",
         "request": "^2.61.0"
     },
     "typings": "couchbase",
@@ -29,7 +29,7 @@
         "jsdoc": "^3.3.2",
         "jsdoc-stability-tag": "^1.0.0",
         "jshint": "^2.8.0",
-        "mocha": "^2.3.0"
+        "mocha": "^3.2.0"
     },
     "repository": {
         "type": "git",
