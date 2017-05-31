@@ -41,6 +41,7 @@
 #include "mcserver/mcserver.h"
 #include "mc/mcreq.h"
 #include "settings.h"
+#include "contrib/genhash/genhash.h"
 
 /* lcb_t-specific includes */
 #include "retryq.h"
@@ -164,6 +165,16 @@ struct lcb_st {
             bs_state = new lcb::Bootstrap(this);
         }
         return bs_state->bootstrap(options);
+    }
+
+    lcbvb_CONFIG *getConfig() const {
+        return cur_configinfo->vbc;
+    }
+
+    int map_key(const std::string& key) {
+        int srvix, tmpvb;
+        lcbvb_map_key(getConfig(), key.c_str(), key.size(), &tmpvb, &srvix);
+        return srvix;
     }
     #endif
 };

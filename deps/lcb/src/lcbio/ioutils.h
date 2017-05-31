@@ -142,8 +142,8 @@ typedef struct {
     #define LCBIO_CONNREQ_POOLED 2
     #define LCBIO_CONNREQ_GENERIC 3
     union {
-        struct lcbio_CONNSTART *cs; /**< from lcbio_connect() */
-        struct lcbio_MGRREQ *preq; /**< from lcbio_mgr_get() */
+        lcbio_pCONNSTART cs; /**< from lcbio_connect() */
+        lcbio_MGRREQ *preq; /**< from lcbio_mgr_get() */
         void *p_generic; /**< Generic pointer. Destroyed via the dtor field */
     } u;
     void (*dtor)(void *);

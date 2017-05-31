@@ -1,5 +1,73 @@
 # Release Notes
 
+## 2.7.4 (April 18 2017)
+
+* Send `SELECT_BUCKET` command by default if server supports it. This enables
+  new-style 'RBAC' authentication by default. In 2.7.3 users were required to
+  use `select_bucket=true` in the connection string to enable this feature.
+  In this version, the option is still available but is now mainly useful to
+  disable it.
+
+* Improve `lcb_AUTHENTICATOR` API. This provides better documentation and some
+  API/design/implementation fixes to the authenticator interface. The
+  authenticator may be useful for integrators/wrappers who wish to correlate
+  multiple credentials with their buckets.
+  Note that the use of `lcb_AUTHENTICATOR` is *not* required for RBAC support.
+  In order to use RBAC, simply make use of the `username` field in
+  the `lcb_create_st` struct, or the `username` parameter in the connection
+  string.
+  * Issues: [CCBC-751](https://issues.couchbase.com/browse/CCBC-751)
+
+* Fix bug where `lcb_get_server_list()` would return NULL.
+  * Issues: [CCBC-764](https://issues.couchbase.com/browse/CCBC-764)
+
+* Fix bug where client would not recover from failover. Clients from version
+  2.7.1 through 2.7.3 would not obtain a new cluster map after a node had
+  been failed over (e.g. by hitting the "fail over" button in the UI).
+  * Issues: [CCBC-761](https://issues.couchbase.com/browse/CCBC-761)
+
+## 2.7.3 (March 21 2017)
+
+* Provide the ability to send the `SELECT_BUCKET` when establishing a
+  to a server. This is a building block allowing us to use 'RBAC'/username
+  auth in the future.
+  Note that this requires the `select_bucket=true` option in the connection
+  string or equivalent, and that this feature as a whole is considered
+  experimental.
+  * Priority: Major
+  * Issues: [CCBC-758](https://issues.couchbase.com/browse/CCBC-758)
+
+* Provide an option to disable DNS-SRV lookups. Because DNS SRV lookups often
+  result in no result (i.e. `NXDOMAIN`) - which takes longer, allowing to
+  disable such lookups may speed up startup time.
+  This option is available via the connection string, using `dnssrv=off`
+  * Priority: Minor
+  * Issues: [CCBC-756](https://issues.couchbase.com/browse/CCBC-756)
+
+* Send client/user-specific identifier in `User-Agent` HTTP header.
+  The library already does this for data nodes (Memcached). Using it in HTTP
+  services allows better supportability when diagnosing issues by reading the
+  HTTP logs.
+  * Priority: Major
+  * Issues: [CCBC-755](https://issues.couchbase.com/browse/CCBC-755)
+
+* Fix bug where DNS SRV hostnames would not be used.
+  While DNS SRV lookup was working, the library would not actually attempt
+  bootstrap off those received hostnames.
+  * Priority: Major
+  * Issues: [CCBC-753](https://issues.couchbase.com/browse/CCBC-753)
+
+* Provide experimental Analytics support.
+  This allows access to the Couchbase Analytics Service, available in
+  some pre-release builds. API and syntax wise, Analytics is very similar
+  to N1QL.
+  To use the analytics service, set the `LCB_CMDN1QL_F_CBASQUERY` bit in
+  `lcb_CMDN1QL::cmdflags`, and provide the appropriate _host:port_ combination
+  in the `lcb_CMDN1QL::host` field. - Currently, analytics support is not
+  used in the cluster map/configuration.
+  * Priority: Major
+  * Issues: [CCBC-734](https://issues.couchbase.com/browse/CCBC-734)
+
 ## 2.7.2 (February 21 2017)
 
 This release consists of additional internal refactoring and some improved
