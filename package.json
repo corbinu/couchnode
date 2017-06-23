@@ -16,7 +16,7 @@
   "license": "Apache-2.0",
   "name": "@corbinu/couchbase",
   "dependencies": {
-    "@types/node": "^7.0.22",
+    "@types/node": "^8.0.2",
     "bindings": "^1.2.1",
     "nan": "^2.6.2",
     "prebuild-install": "^2.1.2",
