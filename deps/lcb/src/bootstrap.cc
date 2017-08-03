@@ -72,6 +72,14 @@ void Bootstrap::config_callback(EventType event, ConfigInfo *info) {
         }
     }
 
+    if (instance->type == LCB_TYPE_CLUSTER && info->get_origin() == CLCONFIG_CLADMIN) {
+        /* Disable HTTP provider for management operations, and fallback to static */
+        if (instance->cur_configinfo == NULL ||
+                instance->cur_configinfo->get_origin() != CLCONFIG_HTTP) {
+            instance->confmon->set_active(CLCONFIG_HTTP, false);
+        }
+    }
+
     if (instance->type != LCB_TYPE_CLUSTER) {
         lcb_update_vbconfig(instance, info);
     }
@@ -90,6 +98,9 @@ void Bootstrap::config_callback(EventType event, ConfigInfo *info) {
             instance->confmon->set_active(CLCONFIG_CCCP, false);
         }
         instance->callbacks.bootstrap(instance, LCB_SUCCESS);
+
+        // See if we can enable background polling.
+        check_bgpoll();
     }
 
     lcb_maybe_breakout(instance);
@@ -102,6 +113,22 @@ void Bootstrap::clconfig_lsn(EventType e, ConfigInfo *i) {
         lcb_log(LOGARGS(parent, INFO), "Got new config. Will refresh asynchronously");
         tm.signal();
     }
+}
+
+void Bootstrap::check_bgpoll() {
+    if (parent->cur_configinfo == NULL ||
+            parent->cur_configinfo->get_origin() != lcb::clconfig::CLCONFIG_CCCP ||
+            LCBT_SETTING(parent, config_poll_interval) == 0) {
+        tmpoll.cancel();
+    } else {
+        tmpoll.rearm(LCBT_SETTING(parent, config_poll_interval));
+    }
+}
+
+void Bootstrap::bgpoll() {
+    lcb_log(LOGARGS(parent, TRACE), "Background-polling for new configuration");
+    bootstrap(BS_REFRESH_THROTTLE);
+    check_bgpoll();
 }
 
 /**
@@ -138,6 +165,7 @@ void Bootstrap::initial_error(lcb_error_t err, const char *errinfo) {
 Bootstrap::Bootstrap(lcb_t instance)
     : parent(instance),
       tm(parent->iotable, this),
+      tmpoll(parent->iotable, this),
       last_refresh(0),
       errcounter(0),
       state(S_INITIAL_PRE) {
@@ -201,7 +229,7 @@ lcb_get_bootstrap_status(lcb_t instance)
         return instance->last_error;
     }
     if (instance->type == LCB_TYPE_CLUSTER) {
-        if (lcb::clconfig::http_get_conn(instance->confmon) != NULL) {
+        if (lcb::clconfig::http_get_conn(instance->confmon) != NULL || instance->confmon->get_config() != NULL) {
             return LCB_SUCCESS;
         }
     }

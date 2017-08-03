@@ -178,7 +178,8 @@ public:
     };
 
     ReadState try_read(lcbio_CTX *ctx, rdb_IOROPE *ior);
-    bool handle_unknown_error(const MemcachedResponse& resinfo, lcb_error_t& newerr);
+    int handle_unknown_error(const mc_PACKET *request,
+                             const MemcachedResponse& resinfo, lcb_error_t& newerr);
     bool handle_nmv(MemcachedResponse& resinfo, mc_PACKET *oldpkt);
     bool maybe_retry_packet(mc_PACKET *pkt, lcb_error_t err);
     bool maybe_reconnect_on_fake_timeout(lcb_error_t received_error);
@@ -203,7 +204,7 @@ public:
     short mutation_tokens;
 
     lcbio_CTX *connctx;
-    lcbio_CONNREQ connreq;
+    lcb::io::ConnectionRequest *connreq;
 
     /** Request for current connection */
     lcb_host_t *curhost;

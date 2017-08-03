@@ -1,5 +1,122 @@
 # Release Notes
 
+## 2.7.6 (July 11 2017)
+
+* Expose enhanced errors for data commands. Couchbase Server 5 might return
+  additional information about errors in the response body. According to
+  SDK-RFC-28, the library allow user code to inspect this information using
+  following functions:
+
+    * `lcb_resp_get_error_context(int, const lcb_RESPBASE *)`
+    * `lcb_resp_get_error_ref(int, const lcb_RESPBASE *)`
+
+  They both return non-NULL strings if any of error information accessible.
+  The lifetime of these fields limited by lifetime of the response object.
+  * Issues: [CCBC-781](https://issues.couchbase.com/browse/CCBC-781)
+
+* Report contextualized error messages during negotiation. The event reference
+  could be used to find more details about authentication errors in the server
+  logs.
+  * Issues: [CCBC-780](https://issues.couchbase.com/browse/CCBC-780)
+
+* Specify correct protocol level for `SO_KEEPALIVE`. This fixes setting
+  `tcp_keepalive` option on connections.
+  * Issues: [CCBC-798](https://issues.couchbase.com/browse/CCBC-798)
+
+* Implement Error Map Retries. This implements the mechanics needed to retry
+  commands on various errors based on dynamic settings supplied via the error map.
+  * Issues: [CCBC-783](https://issues.couchbase.com/browse/CCBC-783)
+
+* Add cluster admin provider. This provider doesn't do anything except serve
+  as a source of management hostnames. And the library will fall back to it
+  when bucket is not specified for cluster management connections.
+  * Issues: [CCBC-797](https://issues.couchbase.com/browse/CCBC-797)
+
+* Implement RBAC user management in cbc tools. In addition to `examples/users`,
+  this can be a demonstration of new security APIs which appear in Couchbase
+  Server 5.
+  * Issues: [CCBC-757](https://issues.couchbase.com/browse/CCBC-757)
+
+* Allow to inspect query errors in `cbc-n1qlback`. The command will write
+  details for failed queries to file, specified with option `--error-log`.
+
+* Fix memory leak in io::Pool
+  * Issues: [CCBC-791](https://issues.couchbase.com/browse/CCBC-791)
+
+* Fix `LCB_SDCMD_GET_FULLDOC`. This would not actually work beforehand
+  because the opcode it's mapped to is 0, and we used 0 as a sentinel
+  value for an invalid opcode within the subdoc implementation.
+  * Issues: [CCBC-792](https://issues.couchbase.com/browse/CCBC-792)
+
+* Add LCB_NOT_AUTHORIZED error code. This error code maps to
+  Memcached's EACCESS
+
+* Don't send empty Authorization header for HTTP requests, If there's
+  no username and/or password
+  * Issues: [CCBC-789](https://issues.couchbase.com/browse/CCBC-789)
+
+* Internal refactoring:
+  - `io::Pool` - remove empty dtor
+  - Fix `BadPluginEnvironment` test on Fedora where libm.so is ld script
+  - Add missing commands for `cbc-help`
+
+* Documentation update:
+  - Add additional documentation for `lcb_n1ql_cancel()`
+  - Typos
+
+## 2.7.5 (May 17 2017)
+
+* Allow to disable sending the `HELLO` command when connecting to a server.
+  Sending `HELLO` will cause a bootstrap failure with Couchbase Server 2.0 and
+  older.
+  * Issues: [CCBC-786](https://issues.couchbase.com/browse/CCBC-786)
+
+* Fix error return value on reprepared query.
+  Previously an error was returned if a N1QL query was reprepared, because
+  the prior internal failure status was not updated.
+  * Issues: [CCBC-782](https://issues.couchbase.com/browse/CCBC-782)
+
+* Check for more N1QL error strings indicating the need to reprepare a statement.
+
+* Fix uninitialized memory issue when initializing `lcb::Server` and `mc_PIPELINE`
+
+* Couchbase 5.0 additions for Subdocument.
+  This adds new protocol extensions for Couchbase 5.0. This consists of:
+  * New `LCB_SDCMD_SET_FULLDOC` and `LCB_SDCMD_GET_FULLDOC` for full-doucument
+    gets and sets via the subdoc API. This allows to access xattrs atomically
+    with the document body.
+  * New 'document flags'. These are in the form of `LCB_CMDSUBDOC_F_`.
+  * Issues: [CCBC-774](https://issues.couchbase.com/browse/CCBC-774)
+
+* Fix bug where CCCP subsystem would be suspended indefinitely.
+  CCCP subsystem would hang if an error was received for the config request
+  itself.
+  * Issues: [CCBC-779](https://issues.couchbase.com/browse/CCBC-779)
+
+* Fix bootstrap with `LCB_TYPE_CLUSTER`. Previously bootstrap would fail because
+  the client would not send proper credentials. Note that at this point, the
+  `default` bucket must still exist.
+  * Issues: [CCBC-778](https://issues.couchbase.com/browse/CCBC-778)
+
+* Ignore empty DNS SRV replies.
+  Some buggy DNS configurations return positive replies to SRV queries, but
+  without actually containing any kind of A record as a response.
+  * Issues: [CCBC-776](https://issues.couchbase.com/browse/CCBC-776)
+
+* Enable background polling for configuration changes.
+  This allows the client to periodically poll for configuration changes. This
+  feature is disabled by default. You can use the `config_poll_interval`
+  setting to enable it in the connection string.
+  * Issues: [CCBC-627](https://issues.couchbase.com/browse/CCBC-627)
+
+* Enable TCP Keepalive for newly created sockets.
+  Newly created sockets have TCP keepalive enabled in order to avoid firewalls
+  breaking connections due to inactivity. TCP Keepalive does not yet work for
+  the libuv plugin (e.g. nodejs).
+  You can use the `tcp_keepalive=false` directive in the connection string
+  to disable it.
+  * Issues: [CCBC-690](https://issues.couchbase.com/browse/CCBC-690)
+
 ## 2.7.4 (April 18 2017)
 
 * Send `SELECT_BUCKET` command by default if server supports it. This enables
@@ -2819,5 +2936,3 @@ These changes extend existing features with enhanced APIs
 * Basic TAP protocol implementation
 
 * Initial win32 support
-
-
