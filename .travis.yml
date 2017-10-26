@@ -9,11 +9,11 @@ matrix:
     env:
     - OS="Linux"
     - NODE_VERSION="8.8.0"
-    - CB_VERSION="enterprise-4.5.1"
+    - CB_VERSION="enterprise-5.0.0"
   - os: osx
     env:
     - NODE_VERSION="8.8.0"
-    - CB_VERSION="enterprise-4.5.1"
+    - CB_VERSION="enterprise-5.0.0"
 before_install:
 - rm -rf ~/.nvm/ && git clone --depth 1 https://github.com/creationix/nvm.git ~/.nvm
 - source ~/.nvm/nvm.sh
