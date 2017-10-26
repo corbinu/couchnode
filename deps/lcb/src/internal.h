@@ -132,6 +132,7 @@ struct lcb_st {
     lcb_MUTATION_TOKEN *dcpinfo; /**< Mapping of known vbucket to {uuid,seqno} info */
     lcbio_pTIMER dtor_timer; /**< Asynchronous destruction timer */
     int type; /**< Type of connection */
+    lcb_BTYPE btype; /**< Type of the bucket */
 
     #ifdef __cplusplus
     lcb_settings* getSettings() { return settings; }
@@ -176,6 +177,11 @@ struct lcb_st {
         lcbvb_map_key(getConfig(), key.c_str(), key.size(), &tmpvb, &srvix);
         return srvix;
     }
+
+    const char *get_bucketname() const {
+        return settings->bucket;
+    }
+
     #endif
 };
 

@@ -23,21 +23,23 @@
  */
 
 /** Convert seconds to millis */
-#define LCB_S2MS(s) ((lcb_uint32_t)s) * 1000
+#define LCB_S2MS(s) (((lcb_uint32_t)s) * 1000)
 
 /** Convert seconds to microseconds */
-#define LCB_S2US(s) ((lcb_uint32_t)s) * 1000000
+#define LCB_S2US(s) (((lcb_uint32_t)s) * 1000000)
 
 /** Convert seconds to nanoseconds */
-#define LCB_S2NS(s) ((hrtime_t)s) * 1000000000
+#define LCB_S2NS(s) (((hrtime_t)s) * 1000000000)
 
 /** Convert nanoseconds to microseconds */
 #define LCB_NS2US(s) (lcb_uint32_t) ((s) / 1000)
 
-#define LCB_MS2US(s) (s) * 1000
+#define LCB_MS2US(s) ((s) * 1000)
 
 /** Convert microseconds to nanoseconds */
-#define LCB_US2NS(s) ((hrtime_t)s) * 1000
+#define LCB_US2NS(s) (((hrtime_t)s) * 1000)
+/** Convert milliseconds to nanoseconds */
+#define LCB_MS2NS(s) (((hrtime_t)s) * 1000000)
 
 
 #define LCB_DEFAULT_TIMEOUT LCB_MS2US(2500)
@@ -56,8 +58,8 @@
 #define LCB_DEFAULT_CONFIG_MAXIMUM_REDIRECTS 3
 #define LCB_DEFAULT_CONFIG_ERRORS_THRESHOLD 100
 
-/* 10 seconds */
-#define LCB_DEFAULT_CONFIG_ERRORS_DELAY LCB_MS2US(10000)
+/* 10 milliseconds */
+#define LCB_DEFAULT_CONFIG_ERRORS_DELAY LCB_MS2US(10)
 
 /* 1 second */
 #define LCB_DEFAULT_CLCONFIG_GRACE_CYCLE LCB_MS2US(1000)
@@ -85,6 +87,11 @@
 #define LCB_DEFAULT_VB_NOGUESS 1
 #define LCB_DEFAULT_TCP_NODELAY 1
 #define LCB_DEFAULT_SELECT_BUCKET 1
+#define LCB_DEFAULT_TCP_KEEPALIVE 1
+/* 2.5 s */
+#define LCB_DEFAULT_CONFIG_POLL_INTERVAL LCB_MS2US(2500)
+/* 50 ms */
+#define LCB_CONFIG_POLL_INTERVAL_FLOOR LCB_MS2US(50)
 
 #include "config.h"
 #include <libcouchbase/couchbase.h>
@@ -130,6 +137,9 @@ typedef struct lcb_settings_st {
      * updates. */
     lcb_U32 bc_http_stream_time;
 
+    /** Time to wait in between background config polls. 0 disables this */
+    lcb_U32 config_poll_interval;
+
     unsigned bc_http_urltype : 4;
 
     /** Don't guess next vbucket server. Mainly for testing */
@@ -152,6 +162,8 @@ typedef struct lcb_settings_st {
     unsigned readj_ts_wait : 1;
     unsigned use_errmap : 1;
     unsigned select_bucket : 1;
+    unsigned tcp_keepalive : 1;
+    unsigned send_hello : 1;
 
     short max_redir;
     unsigned refcount;

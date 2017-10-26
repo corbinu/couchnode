@@ -1,6 +1,6 @@
 sudo: required
 dist: trusty
-language: cpp
+language: java
 services:
 - docker
 matrix:
@@ -8,40 +8,26 @@ matrix:
   - os: linux
     env:
     - OS="Linux"
-    - NODE_VERSION="6.9.0"
-    - CB_VERSION="enterprise-4.5.1"
+    - NODE_VERSION="8.8.0"
+    - CB_VERSION="enterprise-5.0.0"
   - os: osx
     env:
-    - NODE_VERSION="6.9.0"
-    - CB_VERSION="enterprise-4.5.1"
+    - NODE_VERSION="8.8.0"
+    - CB_VERSION="enterprise-5.0.0"
 before_install:
 - rm -rf ~/.nvm/ && git clone --depth 1 https://github.com/creationix/nvm.git ~/.nvm
 - source ~/.nvm/nvm.sh
 - nvm install $NODE_VERSION
 - nvm use $NODE_VERSION
-- npm install -g json
-- if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then docker pull corbinu/couchbase-test:$CB_VERSION;
-  docker pull corbinu/alpine-node-builder; fi;
-- if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then export CB_ID=$(docker run -d -p 8091:8091
-  --env BUCKET=default corbinu/couchbase-test:$CB_VERSION); fi;
-- if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then CBRES=0; while [ $CBRES != 1 ]; do echo
-  -n '.'; R=$(docker inspect $CB_ID | json -a State.Running); if [ "$R" == "true"
-  ]; then let CBRES=1; else sleep 1.3; fi; done; fi;
-- if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then export CB_IP=$(docker inspect --format
-  '{{ .NetworkSettings.IPAddress}}' $CB_ID); fi;
-- if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then export CNCSTR="http://$CB_IP:8091/";
-  fi;
-- if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then docker exec -it $CB_ID couchbase-bootstrap
-  bootstrap; fi;
 install:
 - export PATH=./node_modules/.bin/:$PATH
 - npm install
 - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then make test; fi;
 - mkdir -p prebuilds/@corbinu
-- if [[ "$TRAVIS_BRANCH" = "master" ]]; then prebuild --upload $GITHUB_TOKEN -t 8.0.0 -t 7.0.0 -t 6.9.1 -t 4.6.1; fi;
+- if [[ "$TRAVIS_BRANCH" = "master" ]]; then prebuild --upload $GITHUB_TOKEN -t 8.0.0 -t 6.9.1; fi;
 - if [[ "$TRAVIS_BRANCH" = "master" ]]; then if [[ "$TRAVIS_OS_NAME" == "linux" ]];
   then docker run -t --volume "$(pwd):/install" corbinu/alpine-node-builder prebuild
-  --libc=musl --upload $GITHUB_TOKEN -t 8.0.0 -t 7.0.0 -t 6.9.1 -t 4.6.1; fi; fi;
+  --libc=musl --upload $GITHUB_TOKEN -t 8.0.0 -t 6.9.1; fi; fi;
 script:
 - echo done
 deploy:

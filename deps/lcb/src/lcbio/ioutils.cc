@@ -100,7 +100,7 @@ ioerr2lcberr(lcbio_OSERR in, const lcb_settings *settings)
     case ECONNABORTED:
         return LCB_ECONNRESET;
     default:
-        lcb_log(settings, "lcbio", LCB_LOG_WARN, __FILE__, __LINE__, "FIXME: Unknown iops/os error code %d. Using NETWORK_ERROR", in);
+        lcb_log(settings, "lcbio", LCB_LOG_WARN, __FILE__, __LINE__, "OS errno %d (%s) does not have a direct client error code equivalent. Using NETWORK_ERROR", in, strerror(in));
         return LCB_NETWORK_ERROR;
     }
 }
@@ -124,14 +124,12 @@ lcbio_E_ai2sock(lcbio_TABLE *io, struct addrinfo **ai, int *connerr)
     *connerr = 0;
 
     for (; *ai; *ai = (*ai)->ai_next) {
-        ret = IOT_V0IO(io).socket0(
-                IOT_ARG(io), (*ai)->ai_family, (*ai)->ai_socktype,
-                (*ai)->ai_protocol);
+        ret = io->E_socket(*ai);
 
         if (ret != INVALID_SOCKET) {
             return ret;
         } else {
-            *connerr = IOT_ERRNO(io);
+            *connerr = io->get_errno();
         }
     }
 
@@ -143,9 +141,7 @@ lcbio_C_ai2sock(lcbio_TABLE *io, struct addrinfo **ai, int *connerr)
 {
     lcb_sockdata_t *ret = NULL;
     for (; *ai; *ai = (*ai)->ai_next) {
-        ret = IOT_V1(io).socket(
-                IOT_ARG(io), (*ai)->ai_family, (*ai)->ai_socktype,
-                (*ai)->ai_protocol);
+        ret = io->C_socket(*ai);
         if (ret) {
             return ret;
         } else {
@@ -254,31 +250,26 @@ lcbio_is_netclosed(lcbio_SOCKET *sock, int flags)
 {
     lcbio_pTABLE iot = sock->io;
 
-    if (IOT_IS_EVENT(iot)) {
-        return IOT_V0IO(iot).is_closed(IOT_ARG(iot), sock->u.fd, flags);
+    if (iot->is_E()) {
+        return iot->E_check_closed(sock->u.fd, flags);
     } else {
-        return IOT_V1(iot).is_closed(IOT_ARG(iot), sock->u.sd, flags);
+        return iot->C_check_closed(sock->u.sd, flags);
     }
 }
 
 lcb_error_t
-lcbio_disable_nagle(lcbio_SOCKET *s)
-{
+lcbio_enable_sockopt(lcbio_SOCKET *s, int cntl) {
     lcbio_pTABLE iot = s->io;
-    int val = 1, rv;
-    int is_supp = ((IOT_IS_EVENT(iot) && IOT_V0IO(iot).cntl)) ||
-            (!IOT_IS_EVENT(iot) && IOT_V1(iot).cntl);
+    int rv;
+    int value = 1;
 
-    if (!is_supp) {
+    if (!iot->has_cntl()) {
         return LCB_NOT_SUPPORTED;
     }
-
-    if (IOT_IS_EVENT(iot)) {
-        rv = IOT_V0IO(iot).cntl(IOT_ARG(iot), s->u.fd, LCB_IO_CNTL_SET,
-            LCB_IO_CNTL_TCP_NODELAY, &val);
+    if (iot->is_E()) {
+        rv = iot->E_cntl(s->u.fd, LCB_IO_CNTL_SET, cntl, &value);
     } else {
-        rv = IOT_V1(iot).cntl(IOT_ARG(iot), s->u.sd, LCB_IO_CNTL_SET,
-            LCB_IO_CNTL_TCP_NODELAY, &val);
+        rv = iot->C_cntl(s->u.sd, LCB_IO_CNTL_SET, cntl, &value);
     }
     if (rv != 0) {
         return lcbio_mklcberr(IOT_ERRNO(iot), s->settings);
@@ -287,22 +278,16 @@ lcbio_disable_nagle(lcbio_SOCKET *s)
     }
 }
 
-void
-lcbio_connreq_cancel(lcbio_CONNREQ *req)
-{
-    if (!req->u.cs) {
-        return;
+const char *
+lcbio_strsockopt(int cntl) {
+    switch (cntl) {
+    case LCB_IO_CNTL_TCP_KEEPALIVE:
+        return "TCP_KEEPALIVE";
+    case LCB_IO_CNTL_TCP_NODELAY:
+        return "TCP_NODELAY";
+    default:
+        return "FIXME: Unknown option";
     }
-
-    if (req->type == LCBIO_CONNREQ_POOLED) {
-        lcbio_mgr_cancel(req->u.preq);
-    } else if (req->type == LCBIO_CONNREQ_RAW) {
-        lcbio_connect_cancel(req->u.cs);
-    } else {
-        req->dtor(req->u.p_generic);
-    }
-
-    req->u.cs = NULL;
 }
 
 int
@@ -316,35 +301,29 @@ lcbio_ssl_supported(void)
 }
 
 lcbio_pSSLCTX
-lcbio_ssl_new__fallback(const char *ca, int noverify, lcb_error_t *errp,
-    lcb_settings *settings)
+lcbio_ssl_new__fallback(const char *, int, lcb_error_t *errp,
+    lcb_settings *)
 {
-    (void)ca; (void)noverify; (void)settings;
     if (errp) { *errp = LCB_CLIENT_FEATURE_UNAVAILABLE; }
     return NULL;
 }
 
 
 #ifdef LCB_NO_SSL
-void lcbio_ssl_free(lcbio_pSSLCTX a) {
-    (void)a;
+void lcbio_ssl_free(lcbio_pSSLCTX) {
 }
-lcb_error_t lcbio_ssl_apply(lcbio_SOCKET *a, lcbio_pSSLCTX b) {
-    (void)a;(void)b;
+lcb_error_t lcbio_ssl_apply(lcbio_SOCKET*, lcbio_pSSLCTX) {
     return LCB_CLIENT_FEATURE_UNAVAILABLE;
 }
-int lcbio_ssl_check(lcbio_SOCKET *s) {
-    (void)s;
+int lcbio_ssl_check(lcbio_SOCKET*) {
     return 0;
 }
-lcb_error_t lcbio_ssl_get_error(lcbio_SOCKET *s) {
-    (void)s;
+lcb_error_t lcbio_ssl_get_error(lcbio_SOCKET *) {
     return LCB_SUCCESS;
 }
 void lcbio_ssl_global_init(void) {
 }
-lcb_error_t lcbio_sslify_if_needed(lcbio_SOCKET *s, lcb_settings *st) {
-    (void)s;(void)st;
+lcb_error_t lcbio_sslify_if_needed(lcbio_SOCKET *, lcb_settings *) {
     return LCB_SUCCESS;
 }
 #endif

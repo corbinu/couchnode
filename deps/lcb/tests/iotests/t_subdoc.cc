@@ -22,7 +22,7 @@
 
 namespace std {
 inline ostream& operator<<(ostream& os, const lcb_error_t& rc) {
-    os << "LcbError<";
+    os << "LcbError <0x";
     os << std::hex << static_cast<unsigned>(rc);
     os << " (";
     os << lcb_strerror(NULL, rc);
@@ -300,7 +300,6 @@ TEST_F(SubdocUnitTest, testSdGetExists)
     CREATE_SUBDOC_CONNECTION(hw, instance);
 
     MultiResult res;
-    lcb_error_t rc;
     lcb_SDSPEC spec = { 0 };
     lcb_CMDSUBDOC cmd = { 0 };
     LCB_CMD_SET_KEY(&cmd, key.c_str(), key.size());
@@ -403,7 +402,6 @@ TEST_F(SubdocUnitTest, testSdStore)
 {
     HandleWrap hw;
     lcb_t instance;
-    lcb_error_t rc;
     CREATE_SUBDOC_CONNECTION(hw, instance);
     lcb_CMDSUBDOC cmd = { 0 };
     lcb_SDSPEC spec = { 0 };
@@ -495,7 +493,7 @@ TEST_F(SubdocUnitTest, testMkdoc) {
     HandleWrap hw;
     lcb_t instance;
     lcb_CMDSUBDOC cmd = { 0 };
-    lcb_SDSPEC spec = { 0 };
+    lcb_SDSPEC spec[2] = {{0}};
     MultiResult res;
 
     CREATE_SUBDOC_CONNECTION(hw, instance);
@@ -504,16 +502,27 @@ TEST_F(SubdocUnitTest, testMkdoc) {
     removeKey(instance, key);
 
     LCB_CMD_SET_KEY(&cmd, key.c_str(), key.size());
-    cmd.specs = &spec;
+    cmd.specs = spec;
     cmd.nspecs = 1;
+    cmd.cmdflags = LCB_CMDSUBDOC_F_UPSERT_DOC;
 
-    LCB_SDSPEC_SET_PATH(&spec, "pth", 3);
-    LCB_SDSPEC_SET_VALUE(&spec, "123", 3);
-    spec.options |= LCB_SDSPEC_F_MKDOCUMENT;
-    spec.sdcmd = LCB_SDCMD_DICT_UPSERT;
+    LCB_SDSPEC_SET_PATH(&spec[0], "pth", 3);
+    LCB_SDSPEC_SET_VALUE(&spec[0], "123", 3);
+    spec[0].sdcmd = LCB_SDCMD_DICT_UPSERT;
 
     ASSERT_EQ(LCB_SUCCESS, schedwait(instance, &res, &cmd, lcb_subdoc3));
+
     ASSERT_PATHVAL_EQ("123", instance, key, "pth");
+
+    removeKey(instance, key);
+    LCB_SDSPEC_SET_PATH(&spec[1], "pth2", 4);
+    LCB_SDSPEC_SET_VALUE(&spec[1], "456", 3);
+    spec[1].sdcmd = LCB_SDCMD_DICT_UPSERT;
+    cmd.nspecs = 2;
+    ASSERT_EQ(LCB_SUCCESS, schedwait(instance, &res, &cmd, lcb_subdoc3));
+
+    ASSERT_PATHVAL_EQ("123", instance, key, "pth");
+    ASSERT_PATHVAL_EQ("456", instance, key, "pth2");
 }
 
 TEST_F(SubdocUnitTest, testUnique)
@@ -572,7 +581,6 @@ TEST_F(SubdocUnitTest, testCounter)
     lcb_t instance;
     lcb_CMDSUBDOC cmd = { 0 };
     lcb_SDSPEC spec = { 0 };
-    lcb_error_t rc;
     MultiResult res;
 
     CREATE_SUBDOC_CONNECTION(hw, instance);
@@ -781,6 +789,20 @@ TEST_F(SubdocUnitTest, testMultiMutations)
     ASSERT_EQ(1, mr.size());
     ASSERT_EQ(LCB_SUBDOC_PATH_ENOENT, mr.results[0].rc);
     ASSERT_EQ(1, mr.results[0].index);
+
+    /* check if lcb_subdoc3 can detect mutation, and allow setting exptime */
+    specs.clear();
+    mcmd.multimode = 0;
+    mcmd.exptime = 42;
+
+    LCB_SDSPEC_INIT(&spec, LCB_SDCMD_DICT_UPSERT, "tmpPath", strlen("tmpPath"), "null", 4);
+    specs.push_back(spec);
+    mcmd.specs = &specs[0];
+    mcmd.nspecs = specs.size();
+    ASSERT_EQ(LCB_SUCCESS, schedwait(instance, &mr, &mcmd, lcb_subdoc3));
+    ASSERT_EQ(LCB_SUCCESS, mr.rc);
+    ASSERT_EQ(1, mr.size());
+    ASSERT_EQ(LCB_SUCCESS, mr.results[0].rc);
 }
 
 TEST_F(SubdocUnitTest, testGetCount) {
@@ -788,7 +810,6 @@ TEST_F(SubdocUnitTest, testGetCount) {
     lcb_t instance;
     lcb_CMDSUBDOC cmd = { 0 };
     lcb_SDSPEC spec = { 0 };
-    lcb_error_t rc;
     MultiResult mres;
 
     CREATE_SUBDOC_CONNECTION(hw, instance);

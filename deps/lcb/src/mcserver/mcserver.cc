@@ -195,6 +195,7 @@ static bool is_fastpath_error(uint16_t rc) {
     case PROTOCOL_BINARY_RESPONSE_SUBDOC_DELTA_ERANGE:
     case PROTOCOL_BINARY_RESPONSE_SUBDOC_INVALID_COMBO:
     case PROTOCOL_BINARY_RESPONSE_SUBDOC_MULTI_PATH_FAILURE:
+    case PROTOCOL_BINARY_RESPONSE_EACCESS:
         return true;
     default:
         if (rc >= 0xc0 && rc <= 0xcc) {
@@ -207,6 +208,10 @@ static bool is_fastpath_error(uint16_t rc) {
     }
 }
 
+#define ERRMAP_HANDLE_CONTINUE 0
+#define ERRMAP_HANDLE_DISCONN 1
+#define ERRMAP_HANDLE_RETRY 2
+
 /**
  * Handle an unknown memcached error
  *
@@ -216,12 +221,13 @@ static bool is_fastpath_error(uint16_t rc) {
  * @return true if this function handled the error specially (by disconnecting)
  * or false if normal handling should continue.
  */
-bool Server::handle_unknown_error(const MemcachedResponse& mcresp,
-                                  lcb_error_t& newerr) {
+int Server::handle_unknown_error(const mc_PACKET *request,
+                                 const MemcachedResponse& mcresp,
+                                 lcb_error_t& newerr) {
 
     if (!settings->errmap->isLoaded() || !settings->use_errmap) {
         // If there's no error map, just return false
-        return false;
+        return ERRMAP_HANDLE_CONTINUE;
     }
 
     // Look up the error map definition for this error
@@ -230,7 +236,7 @@ bool Server::handle_unknown_error(const MemcachedResponse& mcresp,
     if (!err.isValid() || err.hasAttribute(errmap::SPECIAL_HANDLING)) {
         lcb_log(LOGARGS_T(ERR), LOGFMT "Received error not in error map or requires special handling! " PKTFMT, LOGID_T(), PKTARGS(mcresp));
         lcbio_ctx_senderr(connctx, LCB_PROTOCOL_ERROR);
-        return true;
+        return ERRMAP_HANDLE_DISCONN;
     } else {
         lcb_log(LOGARGS_T(WARN), LOGFMT "Received server error %s (0x%x) on packet: " PKTFMT, LOGID_T(), err.shortname.c_str(), err.code, PKTARGS(mcresp));
     }
@@ -255,15 +261,39 @@ bool Server::handle_unknown_error(const MemcachedResponse& mcresp,
         newerr = LCB_GENERIC_SUBDOCERR;
     }
 
+    /* TODO: remove masking LOCKED in 3.0 release */
+    if (err.hasAttribute(errmap::ITEM_LOCKED)) {
+        switch (mcresp.opcode()) {
+        case PROTOCOL_BINARY_CMD_SET:
+        case PROTOCOL_BINARY_CMD_REPLACE:
+        case PROTOCOL_BINARY_CMD_DELETE:
+            newerr = LCB_KEY_EEXISTS;
+            break;
+        default:
+            newerr = LCB_ETMPFAIL;
+        }
+    }
+
+    int rv = 0;
+
+    if (err.hasAttribute(errmap::AUTO_RETRY)) {
+        errmap::RetrySpec *spec = err.getRetrySpec();
+
+        mc_PACKET *newpkt = mcreq_renew_packet(request);
+        newpkt->flags &= ~MCREQ_STATE_FLAGS;
+        instance->retryq->add((mc_EXPACKET *)newpkt, newerr ? newerr : LCB_ERROR, spec);
+        rv |= ERRMAP_HANDLE_RETRY;
+    }
+
     if (err.hasAttribute(errmap::CONN_STATE_INVALIDATED)) {
         if (newerr != LCB_SUCCESS) {
             newerr = LCB_ERROR;
         }
         lcbio_ctx_senderr(connctx, newerr);
-        return true;
+        rv |= ERRMAP_HANDLE_DISCONN;
     }
 
-    return false;
+    return rv;
 
 }
 
@@ -329,6 +359,7 @@ Server::try_read(lcbio_CTX *ctx, rdb_IOROPE *ior)
 
     lcb_error_t err_override = LCB_SUCCESS;
     ReadState rdstate = PKT_READ_COMPLETE;
+    int unknown_err_rv;
 
     /* Check if the status code is one which must be handled carefully by the
      * client */
@@ -342,11 +373,17 @@ Server::try_read(lcbio_CTX *ctx, rdb_IOROPE *ior)
         }
         DO_SWALLOW_PAYLOAD()
         goto GT_DONE;
-    } else if (handle_unknown_error(mcresp, err_override)) {
+    } else if ((unknown_err_rv =
+                handle_unknown_error(request, mcresp, err_override)) !=
+                        ERRMAP_HANDLE_CONTINUE) {
         DO_ASSIGN_PAYLOAD()
-        mcreq_dispatch_response(this, request, &mcresp, err_override);
+        if (!(unknown_err_rv & ERRMAP_HANDLE_RETRY)) {
+            mcreq_dispatch_response(this, request, &mcresp, err_override);
+        }
         DO_SWALLOW_PAYLOAD()
-        rdstate = PKT_READ_ABORT;
+        if (unknown_err_rv & ERRMAP_HANDLE_DISCONN) {
+            rdstate = PKT_READ_ABORT;
+        }
         goto GT_DONE;
     }
 
@@ -423,7 +460,8 @@ Server::maybe_retry_packet(mc_PACKET *pkt, lcb_error_t err)
 
     mc_PACKET *newpkt = mcreq_renew_packet(pkt);
     newpkt->flags &= ~MCREQ_STATE_FLAGS;
-    instance->retryq->add((mc_EXPACKET *)newpkt, err);
+    // TODO: Load the 4th argument from the error map
+    instance->retryq->add((mc_EXPACKET *)newpkt, err, NULL);
     return true;
 }
 
@@ -577,7 +615,7 @@ static void mcserver_flush(Server *s) { s->flush(); }
 void
 Server::handle_connected(lcbio_SOCKET *sock, lcb_error_t err, lcbio_OSERR syserr)
 {
-    LCBIO_CONNREQ_CLEAR(&connreq);
+    connreq = NULL;
 
     if (err != LCB_SUCCESS) {
         lcb_log(LOGARGS_T(ERR), LOGFMT "Connection attempt failed. Received %s from libcouchbase, received %d from operating system", LOGID_T(), lcb_strerror_short(err), syserr);
@@ -593,9 +631,8 @@ Server::handle_connected(lcbio_SOCKET *sock, lcb_error_t err, lcbio_OSERR syserr
     SessionInfo* sessinfo = SessionInfo::get(sock);
     if (sessinfo == NULL) {
         lcb_log(LOGARGS_T(TRACE), "<%s:%s> (SRV=%p) Session not yet negotiated. Negotiating", curhost->host, curhost->port, (void*)this);
-        SessionRequest *sreq = SessionRequest::start(
+        connreq = SessionRequest::start(
             sock, settings, default_timeout(), on_connected, this);
-        LCBIO_CONNREQ_MKGENERIC(&connreq, sreq, lcb::sessreq_cancel);
         return;
     } else {
         compsupport = sessinfo->has_feature(PROTOCOL_BINARY_FEATURE_DATATYPE);
@@ -619,9 +656,8 @@ Server::handle_connected(lcbio_SOCKET *sock, lcb_error_t err, lcbio_OSERR syserr
 void
 Server::connect()
 {
-    lcbio_pMGRREQ mr = lcbio_mgr_get(instance->memd_sockpool, curhost,
+    connreq = instance->memd_sockpool->get(*curhost,
         default_timeout(), on_connected, this);
-    LCBIO_CONNREQ_MKPOOLED(&connreq, mr);
     flush_start = flush_noop;
     state = Server::S_CLEAN;
 }
@@ -663,7 +699,7 @@ Server::Server(lcb_t instance_, int ix)
 Server::Server()
     : state(S_TEMPORARY),
       io_timer(NULL), instance(NULL), settings(NULL), compsupport(0),
-      mutation_tokens(0), connctx(NULL), curhost(NULL)
+      mutation_tokens(0), connctx(NULL), connreq(NULL), curhost(NULL)
 {
 }
 
@@ -686,7 +722,7 @@ static void
 close_cb(lcbio_SOCKET *sock, int, void *)
 {
     lcbio_ref(sock);
-    lcbio_mgr_discard(sock);
+    lcb::io::Pool::discard(sock);
 }
 
 static void
@@ -735,7 +771,7 @@ Server::start_errored_ctx(State next_state)
 
     state = next_state;
     /* Cancel any pending connection attempt? */
-    lcbio_connreq_cancel(&connreq);
+    lcb::io::ConnectionRequest::cancel(&connreq);
 
     /* If the server is being destroyed, silence the timer */
     if (next_state == Server::S_CLOSED && io_timer != NULL) {

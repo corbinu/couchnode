@@ -39,7 +39,9 @@ enum Options {
     ALLOW_EXPIRY = 1<<1,
     HAS_VALUE = 1<<2,
     ALLOW_MKDIRP = 1<<3,
-    IS_LOOKUP = 1<<4
+    IS_LOOKUP = 1<<4,
+    // Must encapsulate in 'multi' spec
+    NO_STANDALONE = 1<<5
 };
 
 struct Traits {
@@ -51,7 +53,7 @@ struct Traits {
     const uint8_t opcode;
 
     inline bool valid() const {
-        return opcode != 0;
+        return opcode != PROTOCOL_BINARY_CMD_INVALID;
     }
 
     inline unsigned mode() const {
@@ -120,7 +122,16 @@ static const Traits
 Counter(PROTOCOL_BINARY_CMD_SUBDOC_COUNTER, ALLOW_EXPIRY|HAS_VALUE|ALLOW_MKDIRP);
 
 static const Traits
-Invalid(0, 0);
+GetDoc(PROTOCOL_BINARY_CMD_GET, IS_LOOKUP|EMPTY_PATH|NO_STANDALONE);
+
+static const Traits
+SetDoc(PROTOCOL_BINARY_CMD_SET, EMPTY_PATH|NO_STANDALONE);
+
+static const Traits
+DeleteDoc(PROTOCOL_BINARY_CMD_DELETE, EMPTY_PATH|NO_STANDALONE);
+
+static const Traits
+Invalid(PROTOCOL_BINARY_CMD_INVALID, 0);
 
 const Traits&
 find(unsigned mode)
@@ -150,10 +161,28 @@ find(unsigned mode)
         return Remove;
     case LCB_SDCMD_COUNTER:
         return Counter;
+    case LCB_SDCMD_GET_FULLDOC:
+        return GetDoc;
+    case LCB_SDCMD_SET_FULLDOC:
+        return SetDoc;
+    case LCB_SDCMD_REMOVE_FULLDOC:
+        return DeleteDoc;
     default:
         return Invalid;
     }
 }
+}
+
+namespace SubdocPathFlags {
+static const uint8_t MKDIR_P = 0x01;
+static const uint8_t XATTR = 0x04;
+static const uint8_t EXPAND_MACROS = 0x010;
+}
+
+namespace SubdocDocFlags {
+static const uint8_t MKDOC = 0x01;
+static const uint8_t ADDDOC = 0x02;
+static const uint8_t ACCESS_DELETED = 0x04;
 }
 
 static size_t
@@ -175,30 +204,50 @@ get_valbuf_size(const lcb_VALBUF& vb)
 }
 
 static uint8_t
-make_subdoc_flags(const uint32_t user)
-{
-    uint8_t subdoc_flags = 0;
+make_path_flags(const uint32_t user) {
+    uint8_t flags = 0;
     if (user & LCB_SDSPEC_F_MKINTERMEDIATES) {
-        subdoc_flags |= SUBDOC_FLAG_MKDIR_P;
-    }
-    if (user & LCB_SDSPEC_F_MKDOCUMENT) {
-        subdoc_flags |= SUBDOC_FLAG_MKDOC;
+        flags |= SubdocPathFlags::MKDIR_P;
     }
     if (user & LCB_SDSPEC_F_XATTRPATH) {
-        subdoc_flags |= SUBDOC_FLAG_XATTR_PATH;
+        flags |= SubdocPathFlags::XATTR;
     }
     if (user & LCB_SDSPEC_F_XATTR_MACROVALUES) {
-        subdoc_flags |= (SUBDOC_FLAG_EXPAND_MACROS | SUBDOC_FLAG_XATTR_PATH);
+        flags |= SubdocPathFlags::XATTR | SubdocPathFlags::EXPAND_MACROS;
     }
-    if (user & LCB_SDSPEC_F_XATTR_DELETED_OK) {
-        subdoc_flags |= (SUBDOC_FLAG_XATTR_PATH|SUBDOC_FLAG_ACCESS_DELETED);
+    return flags;
+}
+
+static uint8_t
+make_doc_flags(const uint32_t user) {
+    uint8_t flags = 0;
+    if (user & LCB_CMDSUBDOC_F_INSERT_DOC) {
+        flags |= SubdocDocFlags::ADDDOC;
     }
-    return subdoc_flags;
+    if (user & LCB_CMDSUBDOC_F_UPSERT_DOC) {
+        flags |= SubdocDocFlags::MKDOC;
+    }
+    if (user & LCB_CMDSUBDOC_F_ACCESS_DELETED) {
+        flags |= SubdocDocFlags::ACCESS_DELETED;
+    }
+    return flags;
 }
 
 struct MultiBuilder {
+    static unsigned infer_mode(const lcb_CMDSUBDOC *cmd) {
+        if (cmd->nspecs == 0) {
+            return 0;
+        }
+        const SubdocCmdTraits::Traits& trait = SubdocCmdTraits::find(cmd->specs[0].sdcmd);
+        if (!trait.valid()) {
+            return 0;
+        }
+        return trait.mode();
+    }
+
     MultiBuilder(const lcb_CMDSUBDOC *cmd_)
-    : cmd(cmd_), payload_size(0), mode(0) {
+    : cmd(cmd_), payload_size(0) {
+        mode = infer_mode(cmd_);
         size_t ebufsz = is_lookup() ? cmd->nspecs * 4 : cmd->nspecs * 8;
         extra_body = new char[ebufsz];
         bodysz = 0;
@@ -299,7 +348,7 @@ MultiBuilder::add_spec(const lcb_SDSPEC *spec)
     // opcode
     add_field(trait.opcode, 1);
     // flags
-    add_field(make_subdoc_flags(spec->options), 1);
+    add_field(make_path_flags(spec->options), 1);
 
     uint16_t npath = static_cast<uint16_t>(spec->path.contig.nbytes);
     if (!npath && !trait.chk_allow_empty_path(spec->options)) {
@@ -394,14 +443,18 @@ sd3_single(lcb_t instance, const void *cookie, const lcb_CMDSUBDOC *cmd)
         extlen = 7;
     }
 
-    protocol_binary_request_subdocument request;
-    protocol_binary_request_header *hdr = &request.message.header;
+    uint8_t docflags = make_doc_flags(cmd->cmdflags);
+    if (docflags) {
+        extlen++;
+    }
+
+    protocol_binary_request_header hdr = {{0}};
     mc_PACKET *packet;
     mc_PIPELINE *pipeline;
 
     rc = mcreq_basic_packet(&instance->cmdq,
         (const lcb_CMDBASE*)cmd,
-        hdr, extlen, &packet, &pipeline, MCREQ_BASICPACKET_F_FALLBACKOK);
+        &hdr, extlen, &packet, &pipeline, MCREQ_BASICPACKET_F_FALLBACKOK);
 
     if (rc != LCB_SUCCESS) {
         return rc;
@@ -417,22 +470,36 @@ sd3_single(lcb_t instance, const void *cookie, const lcb_CMDSUBDOC *cmd)
     MCREQ_PKT_RDATA(packet)->cookie = cookie;
     MCREQ_PKT_RDATA(packet)->start = gethrtime();
 
-    hdr->request.magic = PROTOCOL_BINARY_REQ;
-    hdr->request.datatype = PROTOCOL_BINARY_RAW_BYTES;
-    hdr->request.extlen = packet->extlen;
-    hdr->request.opaque = packet->opaque;
-    hdr->request.cas = lcb_htonll(cmd->cas);
-    hdr->request.bodylen = htonl(hdr->request.extlen +
-        ntohs(hdr->request.keylen) + get_value_size(packet));
+    hdr.request.magic = PROTOCOL_BINARY_REQ;
+    hdr.request.datatype = PROTOCOL_BINARY_RAW_BYTES;
+    hdr.request.extlen = packet->extlen;
+    hdr.request.opaque = packet->opaque;
+    hdr.request.opcode = traits.opcode;
+    hdr.request.cas = lcb_htonll(cmd->cas);
+    hdr.request.bodylen = htonl(hdr.request.extlen +
+        ntohs(hdr.request.keylen) + get_value_size(packet));
 
-    request.message.extras.pathlen = htons(spec->path.contig.nbytes);
-    request.message.extras.subdoc_flags = make_subdoc_flags(spec->options);
+    memcpy(SPAN_BUFFER(&packet->kh_span), hdr.bytes, sizeof hdr.bytes);
 
-    hdr->request.opcode = traits.opcode;
-    memcpy(SPAN_BUFFER(&packet->kh_span), request.bytes, sizeof request.bytes);
+    char *extras = SPAN_BUFFER(&packet->kh_span) + MCREQ_PKT_BASESIZE;
+    // Path length:
+    uint16_t enc_pathlen = htons(spec->path.contig.nbytes);
+    memcpy(extras, &enc_pathlen, 2);
+    extras += 2;
+
+    uint8_t path_flags = make_path_flags(spec->options);
+    memcpy(extras, &path_flags, 1);
+    extras += 1;
+
     if (exptime) {
-        exptime = htonl(exptime);
-        memcpy(SPAN_BUFFER(&packet->kh_span) + sizeof request.bytes, &exptime, 4);
+        uint32_t enc_exptime = htonl(exptime);
+        memcpy(extras, &enc_exptime, 4);
+        extras += 4;
+    }
+
+    if (docflags) {
+        memcpy(extras, &docflags, 1);
+        extras += 1;
     }
 
     LCB_SCHED_ADD(instance, pipeline, packet);
@@ -449,10 +516,18 @@ lcb_subdoc3(lcb_t instance, const void *cookie, const lcb_CMDSUBDOC *cmd)
     }
 
     if (cmd->nspecs == 1) {
-        return sd3_single(instance, cookie, cmd);
+        switch (cmd->specs[0].sdcmd) {
+        case LCB_SDCMD_GET_FULLDOC:
+        case LCB_SDCMD_SET_FULLDOC:
+        case LCB_SDCMD_REMOVE_FULLDOC:
+            break;
+        default:
+            return sd3_single(instance, cookie, cmd);
+        }
     }
 
-    uint32_t exp = cmd->exptime;
+    uint32_t expiry = cmd->exptime;
+    uint8_t docflags = make_doc_flags(cmd->cmdflags);
     lcb_error_t rc = LCB_SUCCESS;
 
     MultiBuilder ctx(cmd);
@@ -460,7 +535,7 @@ lcb_subdoc3(lcb_t instance, const void *cookie, const lcb_CMDSUBDOC *cmd)
         *cmd->error_index = -1;
     }
 
-    if (exp && !ctx.is_mutate()) {
+    if (expiry && !ctx.is_mutate()) {
         return LCB_OPTIONS_CONFLICT;
     }
 
@@ -476,7 +551,14 @@ lcb_subdoc3(lcb_t instance, const void *cookie, const lcb_CMDSUBDOC *cmd)
 
     mc_PIPELINE *pl;
     mc_PACKET *pkt;
-    uint8_t extlen = exp ? 4 : 0;
+    uint8_t extlen = 0;
+    if (expiry) {
+        extlen += 4;
+    }
+    if (docflags) {
+        extlen ++;
+    }
+
     protocol_binary_request_header hdr;
 
     if (cmd->error_index) {
@@ -517,9 +599,12 @@ lcb_subdoc3(lcb_t instance, const void *cookie, const lcb_CMDSUBDOC *cmd)
     hdr.request.bodylen = htonl(hdr.request.extlen +
         ntohs(hdr.request.keylen) + ctx.payload_size);
     memcpy(SPAN_BUFFER(&pkt->kh_span), hdr.bytes, sizeof hdr.bytes);
-    if (exp) {
-        exp = htonl(exp);
-        memcpy(SPAN_BUFFER(&pkt->kh_span) + 24, &exp, 4);
+    if (expiry) {
+        expiry = htonl(expiry);
+        memcpy(SPAN_BUFFER(&pkt->kh_span) + 24, &expiry, 4);
+    }
+    if (docflags) {
+        memcpy(SPAN_BUFFER(&pkt->kh_span) + 24 + (extlen -1), &docflags, 1);
     }
 
     MCREQ_PKT_RDATA(pkt)->cookie = cookie;
@@ -527,4 +612,3 @@ lcb_subdoc3(lcb_t instance, const void *cookie, const lcb_CMDSUBDOC *cmd)
     LCB_SCHED_ADD(instance, pl, pkt);
     return LCB_SUCCESS;
 }
-

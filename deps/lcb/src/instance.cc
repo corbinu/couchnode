@@ -129,7 +129,7 @@ lcb_st::process_dns_srv(Connspec& spec)
 
     const Spechost& host = spec.hosts().front();
     lcb_error_t rc = LCB_ERROR;
-    Hostlist* hl = dnssrv_getbslist(host.hostname.c_str(), host.isSSL(), rc);
+    Hostlist* hl = dnssrv_getbslist(host.hostname.c_str(), spec.sslopts() & LCB_SSL_ENABLED, rc);
 
     if (hl == NULL) {
         lcb_log(LOGARGS(this, INFO), "DNS SRV lookup failed: %s. Ignore this if not relying on DNS SRV records", lcb_strerror(this, rc));
@@ -200,7 +200,15 @@ init_providers(lcb_t obj, const Connspec &spec)
                 return LCB_SUCCESS;
             }
         }
-        return LCB_BAD_ENVIRONMENT;
+        if (obj->type == LCB_TYPE_CLUSTER) {
+            /* Cluster-level connection always falls back to static config */
+            Provider *cladmin;
+            cladmin = obj->confmon->get_provider(CLCONFIG_CLADMIN);
+            cladmin->enable();
+            cladmin->configure_nodes(*obj->ht_nodes);
+        } else {
+            return LCB_BAD_ENVIRONMENT;
+        }
     }
 
     if (http_enabled) {
@@ -385,6 +393,7 @@ lcb_error_t lcb_create(lcb_t *instance,
     /* initialize the settings */
     obj->type = type;
     obj->settings = settings;
+    obj->settings->conntype = type;
 
     settings->bucket = strdup(spec.bucket().c_str());
 
@@ -422,12 +431,18 @@ lcb_error_t lcb_create(lcb_t *instance,
 
     obj->cmdq.cqdata = obj;
     obj->iotable = lcbio_table_new(io_priv);
-    obj->memd_sockpool = lcbio_mgr_create(settings, obj->iotable);
-    obj->http_sockpool = lcbio_mgr_create(settings, obj->iotable);
-    obj->memd_sockpool->maxidle = 1;
-    obj->memd_sockpool->tmoidle = 10000000;
-    obj->http_sockpool->maxidle = 1;
-    obj->http_sockpool->tmoidle = 10000000;
+    obj->memd_sockpool = new io::Pool(settings, obj->iotable);
+    obj->http_sockpool = new io::Pool(settings, obj->iotable);
+
+    {
+        // Needs its own scope because there are prior GOTOs
+        io::Pool::Options pool_opts;
+        pool_opts.maxidle = 1;
+        pool_opts.tmoidle = LCB_MS2US(10000); // 10 seconds
+        obj->memd_sockpool->set_options(pool_opts);
+        obj->http_sockpool->set_options(pool_opts);
+    }
+
     obj->confmon = new clconfig::Confmon(settings, obj->iotable);
     obj->ht_nodes = new Hostlist();
     obj->mc_nodes = new Hostlist();
@@ -493,6 +508,8 @@ extern "C" {
 void lcbdur_destroy(void*);
 }
 
+static void do_pool_shutdown(io::Pool *pool) { pool->shutdown(); }
+
 LIBCOUCHBASE_API
 void lcb_destroy(lcb_t instance)
 {
@@ -539,8 +556,8 @@ void lcb_destroy(lcb_t instance)
 
     DESTROY(delete, retryq);
     DESTROY(delete, confmon);
-    DESTROY(lcbio_mgr_destroy, memd_sockpool);
-    DESTROY(lcbio_mgr_destroy, http_sockpool);
+    DESTROY(do_pool_shutdown, memd_sockpool);
+    DESTROY(do_pool_shutdown, http_sockpool);
     DESTROY(lcb_vbguess_destroy, vbguess);
     DESTROY(lcb_n1qlcache_destroy, n1ql_cache);
 

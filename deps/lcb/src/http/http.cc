@@ -406,6 +406,10 @@ Request::get_api_node(lcb_error_t &rc)
     return lcbvb_get_resturl(vbc, ix, svc, mode);
 }
 
+static bool is_nonempty(const char *s) {
+    return s != NULL && *s != '\0';
+}
+
 lcb_error_t
 Request::setup_inputs(const lcb_CMDHTTP *cmd)
 {
@@ -468,12 +472,12 @@ Request::setup_inputs(const lcb_CMDHTTP *cmd)
     }
     add_header("User-Agent", ua);
 
-    if (instance->http_sockpool->maxidle == 0 || !is_data_request()) {
+    if (instance->http_sockpool->get_options().maxidle == 0 || !is_data_request()) {
         add_header("Connection", "close");
     }
 
     add_header("Accept", "application/json");
-    if (password && username) {
+    if (is_nonempty(password) && is_nonempty(username)) {
         char auth[256];
         std::string upassbuf;
         upassbuf.append(username).append(":").append(password);
@@ -544,6 +548,7 @@ Request::create(lcb_t instance,
         *rc = LCB_CLIENT_ENOMEM;
         return NULL;
     }
+    req->start = gethrtime();
 
     *rc = req->setup_inputs(cmd);
     if (*rc != LCB_SUCCESS) {

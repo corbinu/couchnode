@@ -59,7 +59,7 @@ The following common options may be applied to most of the commands
   used to log into the web interface.
 
   Specifying the `-` as the password indicates that the program should prompt for the
-  password. You may also specify the password on the commandline, directly, 
+  password. You may also specify the password on the commandline, directly,
   but is insecure as command line arguments are visible via commands such as `ps`.
 
 * `-T`, `--timings`:
@@ -303,6 +303,13 @@ processes write their logs. This command accepts a single positional argument wh
 is a string describing the verbosity level to be set. The options are `detail`, `debug`
 `info`, and `warning`.
 
+### ping
+
+Sends NOOP-like request to every service on each cluster node, and report time it took to response.
+
+* `--details`:
+  Provide more details about status of the service.
+
 ### mcflush
 
 Flush a _memcached_ bucket. This command takes no arguments, and will fail if the
@@ -412,7 +419,53 @@ require that _flush_ be enabled for the bucket.
 
 See the [OPTIONS](#OPTIONS) for accepted options
 
-### connstr 
+### role-list
+
+List accessible RBAC user roles in the cluster.
+
+In addition to the [OPTIONS](#OPTIONS) specified above, the following options are recognized:
+
+* `-r`, `--raw`:
+  Print unformatted server response in JSON form.
+
+### user-list
+
+List users in the cluster.
+
+In addition to the [OPTIONS](#OPTIONS) specified above, the following options are recognized:
+
+* `-r`, `--raw`:
+  Print unformatted server response in JSON form.
+
+### user-upsert
+
+Create or update a user in the cluster. Takes user ID as an argument.
+
+In addition to the [OPTIONS](#OPTIONS) specified above, the following options are recognized:
+
+* `--domain`=_local|remote_:
+  The domain, where user account defined. If not specified, the default is _local_.
+
+* `--full-name`=_FULL_NAME_:
+  The user's fullname. If not specified, the default is empty string.
+
+* `--role`=_ROLE_:
+  The role associated with user (can be specified multiple times if needed).
+
+* `--user-password`=_PASSWORD_:
+  The password for the user.
+
+### user-delete
+
+Delete a user in the cluster. Takes user ID as an argument.
+
+In addition to the [OPTIONS](#OPTIONS) specified above, the following options are recognized:
+
+* `--domain`=_local|remote_:
+  The domain, where user account defined. If not specified, the default is _local_.
+
+
+### connstr
 
 This command will parse a connection string into its constituent parts and
 display them on the screen. The command takes a single positional argument
@@ -576,6 +629,120 @@ Query a view:
 Issue a N1QL query:
 
     $ cbc n1ql 'SELECT * FROM `travel-sample` WHERE type="airport" AND city=$city' -Qscan_consistency=request_plus -A'$city=\"Reno\"'
+
+
+Check health of the cluster services:
+
+    $ cbc ping --details  -Ucouchbase://192.168.1.101
+    {
+       "services" : {
+          "fts" : [
+             {
+                "details" : "Success (Not an error)",
+                "latency" : "7.833ms",
+                "server" : "192.168.1.101:8094",
+                "status" : 0
+             },
+             {
+                "details" : "Success (Not an error)",
+                "latency" : "9.898ms",
+                "server" : "192.168.1.102:8094",
+                "status" : 0
+             },
+             {
+                "details" : "Success (Not an error)",
+                "latency" : "10.979ms",
+                "server" : "192.168.1.103:8094",
+                "status" : 0
+             },
+             {
+                "details" : "Client-Side timeout exceeded for operation. Inspect network conditions or increase the timeout",
+                "latency" : "75.000s",
+                "server" : "192.168.1.104:8094",
+                "status" : 23
+             }
+          ],
+          "kv" : [
+             {
+                "details" : "Success (Not an error)",
+                "latency" : "2.617ms",
+                "server" : "192.168.1.101:11210",
+                "status" : 0
+             },
+             {
+                "details" : "Success (Not an error)",
+                "latency" : "19.330ms",
+                "server" : "192.168.1.102:11210",
+                "status" : 0
+             },
+             {
+                "details" : "Success (Not an error)",
+                "latency" : "19.334ms",
+                "server" : "192.168.1.103:11210",
+                "status" : 0
+             },
+             {
+                "details" : "Client-Side timeout exceeded for operation. Inspect network conditions or increase the timeout",
+                "latency" : "2.505s",
+                "server" : "192.168.1.104:11210",
+                "status" : 23
+             }
+          ],
+          "n1ql" : [
+             {
+                "details" : "Success (Not an error)",
+                "latency" : "5.671ms",
+                "server" : "192.168.1.102:8093",
+                "status" : 0
+             },
+             {
+                "details" : "Success (Not an error)",
+                "latency" : "6.595ms",
+                "server" : "192.168.1.103:8093",
+                "status" : 0
+             },
+             {
+                "details" : "Success (Not an error)",
+                "latency" : "11.106ms",
+                "server" : "192.168.1.101:8093",
+                "status" : 0
+             },
+             {
+                "details" : "Client-Side timeout exceeded for operation. Inspect network conditions or increase the timeout",
+                "latency" : "75.000s",
+                "server" : "192.168.1.104:8093",
+                "status" : 23
+             }
+          ],
+          "views" : [
+             {
+                "details" : "Success (Not an error)",
+                "latency" : "7.001ms",
+                "server" : "192.168.1.101:8092",
+                "status" : 0
+             },
+             {
+                "details" : "Success (Not an error)",
+                "latency" : "9.022ms",
+                "server" : "192.168.1.102:8092",
+                "status" : 0
+             },
+             {
+                "details" : "Success (Not an error)",
+                "latency" : "10.866ms",
+                "server" : "192.168.1.103:8092",
+                "status" : 0
+             },
+             {
+                "details" : "Client-Side timeout exceeded for operation. Inspect network conditions or increase the timeout",
+                "latency" : "75.000s",
+                "server" : "192.168.1.104:8092",
+                "status" : 23
+             }
+          ]
+       }
+    }
+
 
 ## FILES
 

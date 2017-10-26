@@ -303,13 +303,15 @@ struct Request {
     lcbio_pTABLE io;
     lcbio_pCTX ioctx;
     lcbio_pTIMER timer;
-    lcbio_CONNREQ creq;
+    lcb::io::ConnectionRequest *creq;
 
     /** HTTP Protocol parser */
     lcb::htparse::Parser* parser;
 
     /** overrides default timeout if nonzero */
     const uint32_t user_timeout;
+
+    hrtime_t start; /**< Start time */
 };
 
 } // namespace: http

@@ -3,6 +3,7 @@
 #include <map>
 #include <sstream>
 #include <iostream>
+#include <iomanip>
 #include <fstream>
 #include <algorithm>
 #include <libcouchbase/vbucket.h>
@@ -14,6 +15,12 @@
 #include "common/histogram.h"
 #include "cbc-handlers.h"
 #include "connspec.h"
+#include "contrib/lcb-jsoncpp/lcb-jsoncpp.h"
+
+#ifndef LCB_NO_SSL
+#include <openssl/crypto.h>
+#endif
+
 using namespace cbc;
 
 using std::string;
@@ -229,6 +236,18 @@ common_server_callback(lcb_t, int cbtype, const lcb_RESPSERVERBASE *sbase)
 }
 
 static void
+ping_callback(lcb_t, int, const lcb_RESPPING *resp)
+{
+    if (resp->rc != LCB_SUCCESS) {
+        fprintf(stderr, "failed: %s\n", lcb_strerror(NULL, resp->rc));
+    } else {
+        if (resp->njson) {
+            printf("%.*s", (int)resp->njson, resp->json);
+        }
+    }
+}
+
+static void
 arithmetic_callback(lcb_t, lcb_CALLBACKTYPE type, const lcb_RESPCOUNTER *resp)
 {
     string key = getRespKey((const lcb_RESPBASE *)resp);
@@ -400,21 +419,36 @@ GetHandler::run()
     lcb_install_callback3(instance, LCB_CALLBACK_GET, (lcb_RESPCALLBACK)get_callback);
     lcb_install_callback3(instance, LCB_CALLBACK_GETREPLICA, (lcb_RESPCALLBACK)get_callback);
     const vector<string>& keys = parser.getRestArgs();
-    lcb_error_t err;
+    std::string replica_mode = o_replica.result();
 
     lcb_sched_enter(instance);
     for (size_t ii = 0; ii < keys.size(); ++ii) {
-        lcb_CMDGET cmd = { 0 };
-        const string& key = keys[ii];
-        LCB_KREQ_SIMPLE(&cmd.key, key.c_str(), key.size());
-        if (o_exptime.passed()) {
-            cmd.exptime = o_exptime.result();
+        lcb_error_t err;
+        if (o_replica.passed()) {
+            lcb_CMDGETREPLICA cmd = { 0 };
+            const string& key = keys[ii];
+            LCB_KREQ_SIMPLE(&cmd.key, key.c_str(), key.size());
+            if (replica_mode == "first") {
+                cmd.strategy = LCB_REPLICA_FIRST;
+            } else if (replica_mode == "all") {
+                cmd.strategy = LCB_REPLICA_ALL;
+            } else {
+                cmd.strategy = LCB_REPLICA_SELECT;
+                cmd.index = std::atoi(replica_mode.c_str());
+            }
+            err = lcb_rget3(instance, this, &cmd);
+        } else {
+            lcb_CMDGET cmd = { 0 };
+            const string& key = keys[ii];
+            LCB_KREQ_SIMPLE(&cmd.key, key.c_str(), key.size());
+            if (o_exptime.passed()) {
+                cmd.exptime = o_exptime.result();
+            }
+            if (isLock()) {
+                cmd.lock = 1;
+            }
+            err = lcb_get3(instance, this, &cmd);
         }
-        if (isLock()) {
-            cmd.lock = 1;
-        }
-
-        err = lcb_get3(instance, this, &cmd);
         if (err != LCB_SUCCESS) {
             throw LcbError(err);
         }
@@ -760,11 +794,48 @@ VersionHandler::run()
     memset(&info, 0, sizeof info);
     err = lcb_cntl(NULL, LCB_CNTL_GET, LCB_CNTL_IOPS_DEFAULT_TYPES, &info);
     if (err == LCB_SUCCESS) {
-        fprintf(stderr, "  IO: Default=%s, Current=%s\n",
+        fprintf(stderr, "  IO: Default=%s, Current=%s, Accessible=",
             iops_to_string(info.v.v0.os_default), iops_to_string(info.v.v0.effective));
     }
-    printf("  SSL: .. %s\n",
-            lcb_supports_feature(LCB_SUPPORTS_SSL) ? "SUPPORTED" : "NOT SUPPORTED");
+    {
+        size_t ii;
+        char buf[256] = {0}, *p = buf;
+        lcb_io_ops_type_t known_io[] = {
+            LCB_IO_OPS_WINIOCP,
+            LCB_IO_OPS_LIBEVENT,
+            LCB_IO_OPS_LIBUV,
+            LCB_IO_OPS_LIBEV,
+            LCB_IO_OPS_SELECT
+        };
+
+
+        for (ii = 0; ii < sizeof(known_io) / sizeof(known_io[0]); ii++) {
+            struct lcb_create_io_ops_st cio = {0};
+            lcb_io_opt_t io = NULL;
+
+            cio.v.v0.type = known_io[ii];
+            if (lcb_create_io_ops(&io, &cio) == LCB_SUCCESS) {
+                p += sprintf(p, "%s,", iops_to_string(known_io[ii]));
+            }
+        }
+        *(--p) = '\n';
+        fprintf(stderr, "%s", buf);
+    }
+
+    if (lcb_supports_feature(LCB_SUPPORTS_SSL)) {
+#ifdef LCB_NO_SSL
+        printf("  SSL: SUPPORTED\n");
+#else
+#if defined(OPENSSL_VERSION)
+        printf("  SSL Runtime: %s\n", OpenSSL_version(OPENSSL_VERSION));
+#elif defined(SSLEAY_VERSION)
+        printf("  SSL Runtime: %s\n", SSLeay_version(SSLEAY_VERSION));
+#endif
+        printf("  SSL Headers: %s\n", OPENSSL_VERSION_TEXT);
+#endif
+    } else {
+        printf("  SSL: NOT SUPPORTED\n");
+    }
 }
 
 void
@@ -850,6 +921,28 @@ VerbosityHandler::run()
 }
 
 void
+PingHandler::run()
+{
+    Handler::run();
+
+    lcb_install_callback3(instance, LCB_CALLBACK_PING, (lcb_RESPCALLBACK)ping_callback);
+    lcb_CMDPING cmd = { 0 };
+    lcb_error_t err;
+    cmd.services = LCB_PINGSVC_F_KV | LCB_PINGSVC_F_N1QL | LCB_PINGSVC_F_VIEWS | LCB_PINGSVC_F_FTS;
+    cmd.options = LCB_PINGOPT_F_JSON | LCB_PINGOPT_F_JSONPRETTY;
+    if (o_details.passed()) {
+        cmd.options |= LCB_PINGOPT_F_JSONDETAILS;
+    }
+    lcb_sched_enter(instance);
+    err = lcb_ping3(instance, NULL, &cmd);
+    if (err != LCB_SUCCESS) {
+        throw LcbError(err);
+    }
+    lcb_sched_leave(instance);
+    lcb_wait(instance);
+}
+
+void
 McFlushHandler::run()
 {
     Handler::run();
@@ -910,7 +1003,7 @@ ArithmeticHandler::run()
             cmd.initial = o_initial.result();
         }
         uint64_t delta = o_delta.result();
-        if (delta > std::numeric_limits<int64_t>::max()) {
+        if (delta > static_cast<uint64_t>(std::numeric_limits<int64_t>::max())) {
             throw BadArg("Delta too big");
         }
         cmd.delta = static_cast<int64_t>(delta);
@@ -1166,7 +1259,7 @@ AdminHandler::run()
 {
     fprintf(stderr, "Requesting %s\n", getURI().c_str());
     HttpBaseHandler::run();
-    printf("%s", resbuf.c_str());
+    printf("%s\n", resbuf.c_str());
 }
 
 void
@@ -1198,6 +1291,125 @@ BucketCreateHandler::run()
 
     ss << "&replicaNumber=" << o_replicas.result();
     body_s = ss.str();
+
+    AdminHandler::run();
+}
+
+void
+RbacHandler::run()
+{
+    fprintf(stderr, "Requesting %s\n", getURI().c_str());
+    HttpBaseHandler::run();
+    if (o_raw.result()) {
+        printf("%s\n", resbuf.c_str());
+    } else {
+        format();
+    }
+}
+
+void
+RoleListHandler::format()
+{
+    Json::Value json;
+    if (!Json::Reader().parse(resbuf, json)) {
+        fprintf(stderr, "Failed to parse response as JSON, falling back to raw mode\n");
+        printf("%s\n", resbuf.c_str());
+    }
+
+    std::map<string, string> roles;
+    size_t max_width = 0;
+    for (Json::Value::iterator i = json.begin(); i != json.end(); i++) {
+        Json::Value role = *i;
+        string role_id = role["role"].asString() + ": ";
+        roles[role_id] = role["desc"].asString();
+        if (max_width < role_id.size()) {
+            max_width = role_id.size();
+        }
+    }
+    for (map<string, string>::iterator i = roles.begin(); i != roles.end(); i++) {
+        std::cout << std::left << std::setw(max_width) << i->first << i->second << std::endl;
+    }
+}
+
+void
+UserListHandler::format()
+{
+    Json::Value json;
+    if (!Json::Reader().parse(resbuf, json)) {
+        fprintf(stderr, "Failed to parse response as JSON, falling back to raw mode\n");
+        printf("%s\n", resbuf.c_str());
+    }
+
+    map<string, map<string, string> > users;
+    size_t max_width = 0;
+    for (Json::Value::iterator i = json.begin(); i != json.end(); i++) {
+        Json::Value user = *i;
+        string domain = user["domain"].asString();
+        string user_id = user["id"].asString();
+        string user_name = user["name"].asString();
+        if (!user_name.empty()) {
+            user_id += " (" + user_name + "): ";
+        }
+        stringstream roles;
+        Json::Value roles_ary = user["roles"];
+        for (Json::Value::iterator j = roles_ary.begin(); j != roles_ary.end(); j++) {
+            Json::Value role = *j;
+            roles << "\n   - " << role["role"].asString();
+            if (!role["bucket_name"].empty()) {
+                roles << "[" << role["bucket_name"].asString() << "]";
+            }
+        }
+        if (max_width < user_id.size()) {
+            max_width = user_id.size();
+        }
+        users[domain][user_id] = roles.str();
+    }
+    if (!users["local"].empty()) {
+        std::cout << "Local users:" << std::endl;
+        int j = 1;
+        for (map<string, string>::iterator i = users["local"].begin(); i != users["local"].end(); i++, j++) {
+            std::cout << j << ". " << std::left << std::setw(max_width) << i->first << i->second << std::endl;
+        }
+    }
+    if (!users["external"].empty()) {
+        std::cout << "External users:" << std::endl;
+        int j = 1;
+        for (map<string, string>::iterator i = users["external"].begin(); i != users["external"].end(); i++, j++) {
+            std::cout << j << ". " << std::left << std::setw(max_width) << i->first << i->second << std::endl;
+        }
+    }
+}
+
+void
+UserUpsertHandler::run()
+{
+    stringstream ss;
+
+    name = getRequiredArg();
+    domain = o_domain.result();
+    if (domain != "local" && domain != "external") {
+        throw BadArg("Unrecognized domain type");
+    }
+    if (!o_roles.passed()) {
+        throw BadArg("At least one role has to be specified");
+    }
+    std::vector<std::string> roles = o_roles.result();
+    std::string roles_param;
+    for (size_t ii = 0; ii < roles.size(); ii++) {
+        if (roles_param.empty()) {
+            roles_param += roles[ii];
+        } else {
+            roles_param += std::string(",") + roles[ii];
+        }
+    }
+    ss << "roles=" << roles_param;
+    if (o_full_name.passed()) {
+        ss << "&name=" << o_full_name.result();
+    }
+    if (o_password.passed()) {
+        ss << "&password=" << o_password.result();
+    }
+    body = ss.str();
 
     AdminHandler::run();
 }
@@ -1240,6 +1452,8 @@ ConnstrHandler::run()
         if (spec.sslopts() & LCB_SSL_NOVERIFY) {
             sslOpts += "|NOVERIFY";
         }
+    } else {
+        sslOpts = "DISABLED";
     }
     printf("SSL: %s\n", sslOpts.c_str());
 
@@ -1326,6 +1540,7 @@ static const char* optionsOrder[] = {
         "hash",
         "lock",
         "unlock",
+        "cp",
         "rm",
         "stats",
         // "verify,
@@ -1337,9 +1552,14 @@ static const char* optionsOrder[] = {
         "bucket-create",
         "bucket-delete",
         "bucket-flush",
+        "role-list",
+        "user-list",
+        "user-upsert",
+        "user-delete",
         "connstr",
         "write-config",
         "strerror",
+        "ping",
         NULL
 };
 
@@ -1409,6 +1629,7 @@ setupHandlers()
     handlers_s["cp"] = new SetHandler("cp");
     handlers_s["stats"] = new StatsHandler();
     handlers_s["verbosity"] = new VerbosityHandler();
+    handlers_s["ping"] = new PingHandler();
     handlers_s["mcflush"] = new McFlushHandler();
     handlers_s["incr"] = new IncrHandler();
     handlers_s["decr"] = new DecrHandler();
@@ -1423,8 +1644,10 @@ setupHandlers()
     handlers_s["strerror"] = new StrErrorHandler();
     handlers_s["observe-seqno"] = new ObserveSeqnoHandler();
     handlers_s["touch"] = new TouchHandler();
-
-
+    handlers_s["role-list"] = new RoleListHandler();
+    handlers_s["user-list"] = new UserListHandler();
+    handlers_s["user-upsert"] = new UserUpsertHandler();
+    handlers_s["user-delete"] = new UserDeleteHandler();
 
     map<string,Handler*>::iterator ii;
     for (ii = handlers_s.begin(); ii != handlers_s.end(); ++ii) {
@@ -1495,6 +1718,14 @@ wrapExternalBinary(int argc, char **argv, const std::string& name)
 #endif
 }
 
+static void cleanupHandlers()
+{
+    map<string,Handler*>::iterator iter = handlers_s.begin();
+    for (; iter != handlers_s.end(); iter++) {
+        delete iter->second;
+    }
+}
+
 int main(int argc, char **argv)
 {
 
@@ -1504,10 +1735,14 @@ int main(int argc, char **argv)
             wrapExternalBinary(argc, argv, "cbc-pillowfight");
         } else if (strcmp(argv[1], "n1qlback") == 0) {
             wrapExternalBinary(argc, argv, "cbc-n1qlback");
+        } else if (strcmp(argv[1], "subdoc") == 0) {
+            wrapExternalBinary(argc, argv, "cbc-subdoc");
         }
     }
 
     setupHandlers();
+    std::atexit(cleanupHandlers);
+
     string cmdname;
     parseCommandname(cmdname, argc, argv);
 
@@ -1541,10 +1776,4 @@ int main(int argc, char **argv)
         fprintf(stderr, "%s\n", err.what());
         exit(EXIT_FAILURE);
     }
-
-    map<string,Handler*>::iterator iter = handlers_s.begin();
-    for (; iter != handlers_s.end(); iter++) {
-        delete iter->second;
-    }
-    exit(EXIT_SUCCESS);
 }
