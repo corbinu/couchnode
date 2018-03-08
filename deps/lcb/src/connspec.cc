@@ -250,15 +250,35 @@ Connspec::parse_options(
             } else {
                 SET_ERROR("Invalid value for 'ssl'. Choices are on, off, and no_verify");
             }
+        } else if (!strcmp(key, "truststorepath")) {
+            if (! (m_flags & F_SSLSCHEME)) {
+                SET_ERROR("Trust store path must be specified with SSL host or scheme");
+            }
+            m_truststorepath = value;
         } else if (!strcmp(key, "certpath")) {
             if (! (m_flags & F_SSLSCHEME)) {
                 SET_ERROR("Certificate path must be specified with SSL host or scheme");
             }
             m_certpath = value;
+        } else if (!strcmp(key, "keypath")) {
+            if (! (m_flags & F_SSLSCHEME)) {
+                SET_ERROR("Private key path must be specified with SSL host or scheme");
+            }
+            m_keypath = value;
         } else if (!strcmp(key, "console_log_level")) {
             if (sscanf(value, "%d", &m_loglevel) != 1) {
                 SET_ERROR("console_log_level must be a numeric value");
             }
+        } else if (!strcmp(key, "log_redaction")) {
+            int btmp = 0;
+            if (!strcmp(value, "on") || !strcmp(value, "true")) {
+                btmp = 1;
+            } else if (!strcmp(value, "off") || !strcmp(value, "false")) {
+                btmp = 0;
+            } else if (sscanf(value, "%d", &btmp) != 1) {
+                SET_ERROR("log_redaction must have numeric (boolean) value");
+            }
+            m_logredact = btmp != 0;
         } else if (!strcmp(key, "dnssrv")) {
             if ((m_flags & F_DNSSRV_EXPLICIT) == F_DNSSRV_EXPLICIT) {
                 SET_ERROR("Cannot use dnssrv scheme with dnssrv option");
@@ -289,6 +309,9 @@ Connspec::parse_options(
         } else {
             m_ctlopts.push_back(std::make_pair(key, value));
         }
+    }
+    if (!m_keypath.empty() && m_certpath.empty()) {
+        SET_ERROR("Private key path must be specified with certificate path");
     }
 
     return LCB_SUCCESS;

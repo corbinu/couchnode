@@ -19,13 +19,13 @@
 #include "connspec.h"
 #include "logging.h"
 #include "hostlist.h"
+#include "rnd.h"
 #include "http/http.h"
 #include "bucketconfig/clconfig.h"
 #include <lcbio/iotable.h>
 #include <lcbio/ssl.h>
 #define LOGARGS(obj,lvl) (obj)->settings, "instance", LCB_LOG_##lvl, __FILE__, __LINE__
 
-static volatile unsigned int lcb_instance_index = 0;
 using namespace lcb;
 
 LIBCOUCHBASE_API
@@ -56,6 +56,11 @@ LIBCOUCHBASE_API
 void
 lcb_set_auth(lcb_t instance, lcb_AUTHENTICATOR *auth)
 {
+    if (LCBT_SETTING(instance, keypath)) {
+        lcb_log(LOGARGS(instance, WARN),
+                "Custom authenticator ignored when SSL client certificate authentication in use");
+        return;
+    }
     /* First increase refcount in case they are the same object(!) */
     lcbauth_ref(auth);
     lcbauth_unref(instance->settings->auth);
@@ -74,7 +79,11 @@ lcb_st::add_bs_host(const char *host, int port, unsigned bstype)
         tname = "HTTP";
         target = ht_nodes;
     }
-    lcb_log(LOGARGS(this, DEBUG), "Adding host %s:%d to initial %s bootstrap list", host, port, tname);
+    bool ipv6 = strchr(host, ':') != NULL;
+    lcb_log(LOGARGS(this, DEBUG), "Adding host " LCB_LOG_SPEC("%s%s%s:%d") "to initial %s bootstrap list",
+            this->settings->log_redaction ? LCB_LOG_SD_OTAG : "",
+            ipv6 ? "[" : "", host, ipv6 ? "]" : "", port,
+            this->settings->log_redaction ? LCB_LOG_SD_CTAG : "", tname);
     target->add(host, port);
 }
 
@@ -150,7 +159,9 @@ lcb_st::process_dns_srv(Connspec& spec)
         sh.port = std::atoi(src.port);
         sh.type = spec.default_port();
         spec.add_host(sh);
-        lcb_log(LOGARGS(this, INFO), "Found host %s:%d via DNS SRV", sh.hostname.c_str(), sh.port);
+        bool ipv6 = sh.hostname.find(':') != std::string::npos;
+        lcb_log(LOGARGS(this, INFO), "Found host %s%s%s:%d via DNS SRV", ipv6 ? "[" : "", sh.hostname.c_str(),
+                ipv6 ? "]" : "", (int)sh.port);
     }
     delete hl;
 
@@ -242,6 +253,11 @@ setup_ssl(lcb_t obj, const Connspec& params)
         settings->certpath = strdup(optbuf);
     }
 
+    if (lcb_getenv_nonempty("LCB_SSL_KEY", optbuf, sizeof optbuf)) {
+        lcb_log(LOGARGS(obj, INFO), "SSL key %s specified on environment", optbuf);
+        settings->keypath = strdup(optbuf);
+    }
+
     if (lcb_getenv_nonempty("LCB_SSL_MODE", optbuf, sizeof optbuf)) {
         if (sscanf(optbuf, "%d", &env_policy) != 1) {
             lcb_log(LOGARGS(obj, ERR), "Invalid value for environment LCB_SSL. (%s)", optbuf);
@@ -252,8 +268,16 @@ setup_ssl(lcb_t obj, const Connspec& params)
         }
     }
 
+    if (settings->truststorepath == NULL && !params.truststorepath().empty()) {
+        settings->truststorepath = strdup(params.truststorepath().c_str());
+    }
+
     if (settings->certpath == NULL && !params.certpath().empty()) {
         settings->certpath = strdup(params.certpath().c_str());
+    }
+
+    if (settings->keypath == NULL && !params.keypath().empty()) {
+        settings->keypath = strdup(params.keypath().c_str());
     }
 
     if (env_policy == -1) {
@@ -266,11 +290,21 @@ setup_ssl(lcb_t obj, const Connspec& params)
         } else {
             lcb_log(LOGARGS(obj, INFO), "ssl=no_global_init. Not initializing openssl globals");
         }
-        settings->ssl_ctx = lcbio_ssl_new(settings->certpath,
-            settings->sslopts & LCB_SSL_NOVERIFY, &err, settings);
+        if (settings->keypath && !settings->certpath) {
+            lcb_log(LOGARGS(obj, ERR), "SSL key have to be specified with certificate");
+            return LCB_EINVAL;
+        }
+        settings->ssl_ctx =
+            lcbio_ssl_new(settings->truststorepath, settings->certpath, settings->keypath,
+                          settings->sslopts & LCB_SSL_NOVERIFY, &err, settings);
         if (!settings->ssl_ctx) {
             return err;
         }
+    } else {
+        // keypath might be used to flag, that library is using SSL authentication
+        // To avoid skipping other authentication mechanisms, cleanup the keypath.
+        free(settings->keypath);
+        settings->keypath = NULL;
     }
     return LCB_SUCCESS;
 }
@@ -369,6 +403,10 @@ lcb_error_t lcb_create(lcb_t *instance,
     lcb_error_t err;
     lcb_settings *settings;
 
+#if !defined(COMPILER_SUPPORTS_CXX11) || _MSC_VER < 1600
+    lcb_rnd_global_init();
+#endif
+
     if (options) {
         io_priv = options->v.v0.io;
         if (options->version > 0) {
@@ -414,14 +452,21 @@ lcb_error_t lcb_create(lcb_t *instance,
     }
 
     settings->logger = lcb_init_console_logger();
-    settings->iid = lcb_instance_index++;
+    settings->iid = lcb_next_rand32();
     if (spec.loglevel()) {
         lcb_U32 val = spec.loglevel();
         lcb_cntl(obj, LCB_CNTL_SET, LCB_CNTL_CONLOGGER_LEVEL, &val);
     }
+    settings->log_redaction = spec.logredact();
+    if (settings->log_redaction) {
+        lcb_log(LOGARGS(obj, INFO), "Logging redaction enabled. Logs have reduced identifying information. Diagnosis "
+                                    "and support of issues may be challenging or not possible in this configuration");
+    }
 
     lcb_log(LOGARGS(obj, INFO), "Version=%s, Changeset=%s", lcb_get_version(NULL), LCB_VERSION_CHANGESET);
-    lcb_log(LOGARGS(obj, INFO), "Effective connection string: %s. Bucket=%s", spec.connstr().c_str(), settings->bucket);
+    lcb_log(LOGARGS(obj, INFO), "Effective connection string: " LCB_LOG_SPEC("%s") ". Bucket=" LCB_LOG_SPEC("%s"),
+            settings->log_redaction ? LCB_LOG_SD_OTAG : "", spec.connstr().c_str(), settings->log_redaction ? LCB_LOG_SD_CTAG : "",
+            settings->log_redaction ? LCB_LOG_MD_OTAG : "", settings->bucket, settings->log_redaction ? LCB_LOG_MD_CTAG : "");
 
     if (io_priv == NULL) {
         lcb_io_opt_t ops;
@@ -446,7 +491,7 @@ lcb_error_t lcb_create(lcb_t *instance,
         obj->http_sockpool->set_options(pool_opts);
     }
 
-    obj->confmon = new clconfig::Confmon(settings, obj->iotable);
+    obj->confmon = new clconfig::Confmon(settings, obj->iotable, obj);
     obj->ht_nodes = new Hostlist();
     obj->mc_nodes = new Hostlist();
     obj->retryq = new RetryQueue(&obj->cmdq, obj->iotable, obj->settings);
@@ -488,6 +533,12 @@ lcb_error_t lcb_create(lcb_t *instance,
         *instance = obj;
     }
     return err;
+}
+
+LIBCOUCHBASE_API
+int lcb_is_redacting_logs(lcb_t instance)
+{
+    return instance && instance->settings && instance->settings->log_redaction;
 }
 
 typedef struct {
@@ -724,12 +775,15 @@ LIBCOUCHBASE_API
 int
 lcb_supports_feature(int n)
 {
-    if (n == LCB_SUPPORTS_SNAPPY) {
-#ifdef LCB_NO_SNAPPY
-        return 0;
-#else
+    if (n == LCB_SUPPORTS_TRACING) {
+#ifdef LCB_TRACING
         return 1;
+#else
+        return 0;
 #endif
+    }
+    if (n == LCB_SUPPORTS_SNAPPY) {
+        return 1;
     }
     if (n == LCB_SUPPORTS_SSL) {
         return lcbio_ssl_supported();
@@ -813,6 +867,15 @@ LCB_INTERNAL_API
 const char *lcb_strerror_short(lcb_error_t error)
 {
 #define X(c, v, t, s) if (error == c) { return #c " (" #v ")"; }
+    LCB_XERR(X)
+#undef X
+    return "<FIXME: Not an LCB error>";
+}
+
+LCB_INTERNAL_API
+const char *lcb_strerror_long(lcb_error_t error)
+{
+#define X(c, v, t, s) if (error == c) { return #c " (" #v "): " s; }
     LCB_XERR(X)
 #undef X
     return "<FIXME: Not an LCB error>";

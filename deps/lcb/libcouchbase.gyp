@@ -32,6 +32,7 @@
 
     'defines': [
       'LIBCOUCHBASE_INTERNAL=1',
+      'LCB_STATIC_SNAPPY=1',
       'LCB_LIBDIR=""'
     ],
 
@@ -40,6 +41,7 @@
       'src',
       'contrib',
       'contrib/cbsasl/include',
+      'contrib/snappy',
       'gyp_config/common',
       'gyp_config/<(OS)/<(target_arch)'
     ],
@@ -190,7 +192,7 @@
         'src/lcbio/manager.cc',
         'src/lcbio/protoctx.c',
         'src/lcbio/timer.c',
-        'src/mc/compress.c',
+        'src/mc/compress.cc',
         'src/mc/forward.c',
         'src/mc/mcreq.c',
         'src/mcserver/mcserver.cc',
@@ -249,6 +251,7 @@
         'src/retrychk.cc',
         'src/retryq.cc',
         'src/ringbuffer.c',
+        'src/rnd.cc',
         'src/settings.c',
         'src/timings.c',
         'src/utilities.c',
