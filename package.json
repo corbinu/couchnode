@@ -16,17 +16,17 @@
   "license": "Apache-2.0",
   "name": "@corbinu/couchbase",
   "dependencies": {
-    "@types/node": "^8.0.57",
+    "@types/node": "^9.4.6",
     "bindings": "^1.3.0",
-    "nan": "^2.8.0",
-    "prebuild-install": "^2.4.0",
+    "nan": "^2.9.2",
+    "prebuild-install": "^2.5.1",
     "request": "^2.83.0"
   },
   "typings": "couchbase",
   "devDependencies": {
     "jshint": "^2.9.5",
-    "mocha": "^4.0.1",
-    "prebuild": "^7.0.0"
+    "mocha": "^5.0.4",
+    "prebuild": "^7.4.0"
   },
   "repository": {
     "type": "git",

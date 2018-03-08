@@ -255,9 +255,10 @@ struct lcbio_SSLCTX {
     SSL_CTX *ctx;
 };
 
-lcbio_pSSLCTX
-lcbio_ssl_new(const char *cafile, int noverify, lcb_error_t *errp,
-    lcb_settings *settings)
+#define LOGARGS_S(settings, lvl) settings, "SSL", lvl, __FILE__, __LINE__
+
+lcbio_pSSLCTX lcbio_ssl_new(const char *tsfile, const char *cafile, const char *keyfile, int noverify,
+                            lcb_error_t *errp, lcb_settings *settings)
 {
     lcb_error_t err_s;
     lcbio_pSSLCTX ret;
@@ -281,9 +282,27 @@ lcbio_ssl_new(const char *cafile, int noverify, lcb_error_t *errp,
 //    SSL_CTX_set_cipher_list(ret->ctx, "!NULL");
 
     if (cafile) {
-        if (!SSL_CTX_load_verify_locations(ret->ctx, cafile, NULL)) {
+        lcb_log(LOGARGS_S(settings, LCB_LOG_DEBUG), "Load verify locations from \"%s\"", tsfile ? tsfile : keyfile);
+        if (!SSL_CTX_load_verify_locations(ret->ctx, tsfile ? tsfile : cafile, NULL)) {
             *errp = LCB_SSL_ERROR;
             goto GT_ERR;
+        }
+        if (keyfile) {
+            lcb_log(LOGARGS_S(settings, LCB_LOG_DEBUG), "Authenticate with key \"%s\", cert \"%s\"", keyfile, cafile);
+            if (!SSL_CTX_use_certificate_file(ret->ctx, cafile, SSL_FILETYPE_PEM)) {
+                *errp = LCB_SSL_ERROR;
+                goto GT_ERR;
+            }
+            if (!SSL_CTX_use_PrivateKey_file(ret->ctx, keyfile, SSL_FILETYPE_PEM)) {
+                lcb_log(LOGARGS_S(settings, LCB_LOG_ERROR), "Unable to load private key \"%s\"", keyfile);
+                *errp = LCB_SSL_ERROR;
+                goto GT_ERR;
+            }
+            if (!SSL_CTX_check_private_key(ret->ctx)) {
+                lcb_log(LOGARGS_S(settings, LCB_LOG_ERROR), "Unable to verify private key \"%s\"", keyfile);
+                *errp = LCB_SSL_ERROR;
+                goto GT_ERR;
+            }
         }
     }
 

@@ -557,19 +557,23 @@ NAN_METHOD(CouchbaseImpl::fnMutateIn) {
         }
 
         int dataCount = 0;
+        int isMultiValued = 0;
         switch(sdcmd.sdcmd) {
         case LCB_SDCMD_REMOVE:
             dataCount = 2;
             break;
         case LCB_SDCMD_REPLACE:
-        case LCB_SDCMD_ARRAY_INSERT:
         case LCB_SDCMD_DICT_ADD:
         case LCB_SDCMD_DICT_UPSERT:
-        case LCB_SDCMD_ARRAY_ADD_FIRST:
-        case LCB_SDCMD_ARRAY_ADD_LAST:
         case LCB_SDCMD_ARRAY_ADD_UNIQUE:
         case LCB_SDCMD_COUNTER:
             dataCount = 3;
+            break;
+        case LCB_SDCMD_ARRAY_INSERT:
+        case LCB_SDCMD_ARRAY_ADD_FIRST:
+        case LCB_SDCMD_ARRAY_ADD_LAST:
+            dataCount = 3;
+            isMultiValued = 1;
             break;
         default:
             return Nan::ThrowError(Error::create("unexpected optype"));
@@ -599,6 +603,12 @@ NAN_METHOD(CouchbaseImpl::fnMutateIn) {
                     &sdcmd.value.u_buf.contig.bytes,
                     &sdcmd.value.u_buf.contig.nbytes,
                     info[index + 3]);
+
+           if (isMultiValued != 0) {
+              // Strip the brackets off of this.
+              *((char*)&sdcmd.value.u_buf.contig.bytes) += 1;
+              sdcmd.value.u_buf.contig.nbytes -= 2;
+           }
         }
 
         specs.push_back(sdcmd);
@@ -609,6 +619,50 @@ NAN_METHOD(CouchbaseImpl::fnMutateIn) {
     cmd.nspecs = specs.size();
 
     err = lcb_subdoc3(me->getLcbHandle(), cookie, &cmd);
+    if (err) {
+        return Nan::ThrowError(Error::create(err));
+    }
+
+    return info.GetReturnValue().Set(true);
+}
+
+NAN_METHOD(CouchbaseImpl::fnPing) {
+    CouchbaseImpl *me = ObjectWrap::Unwrap<CouchbaseImpl>(info.This());
+    lcb_CMDPING cmd;
+    void *cookie;
+    Nan::HandleScope scope;
+    CommandEncoder enc;
+
+    memset(&cmd, 0, sizeof(cmd));
+    cmd.options = LCB_PINGOPT_F_JSON | LCB_PINGOPT_F_JSONDETAILS;
+    if (!enc.parseUintOption(&cmd.services, info[0])) {
+        return Nan::ThrowError(Error::create("bad services passed"));
+    }
+    if (!enc.parseCookie(&cookie, info[1])) {
+        return Nan::ThrowError(Error::create("bad callback passed"));
+    }
+
+    lcb_error_t err = lcb_ping3(me->getLcbHandle(), cookie, &cmd);
+    if (err) {
+        return Nan::ThrowError(Error::create(err));
+    }
+
+    return info.GetReturnValue().Set(true);
+}
+
+NAN_METHOD(CouchbaseImpl::fnDiag) {
+    CouchbaseImpl *me = ObjectWrap::Unwrap<CouchbaseImpl>(info.This());
+    lcb_CMDDIAG cmd;
+    void *cookie;
+    Nan::HandleScope scope;
+    CommandEncoder enc;
+
+    memset(&cmd, 0, sizeof(cmd));
+    if (!enc.parseCookie(&cookie, info[0])) {
+        return Nan::ThrowError(Error::create("bad callback passed"));
+    }
+
+    lcb_error_t err = lcb_diag(me->getLcbHandle(), cookie, &cmd);
     if (err) {
         return Nan::ThrowError(Error::create(err));
     }

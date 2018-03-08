@@ -134,8 +134,8 @@ Server::handle_nmv(MemcachedResponse& resinfo, mc_PACKET *oldpkt)
     /* Notify of new map */
     lcb_vbguess_remap(instance, vbid, index);
 
-    if (resinfo.bodylen() && cccp->enabled) {
-        std::string s(resinfo.body<const char*>(), resinfo.vallen());
+    if (resinfo.vallen() && cccp->enabled) {
+        std::string s(resinfo.value(), resinfo.vallen());
         err = lcb::clconfig::cccp_update(cccp, curhost->host, s.c_str());
     }
 
@@ -646,7 +646,7 @@ Server::handle_connected(lcbio_SOCKET *sock, lcb_error_t err, lcbio_OSERR syserr
             sock, settings, default_timeout(), on_connected, this);
         return;
     } else {
-        compsupport = sessinfo->has_feature(PROTOCOL_BINARY_FEATURE_DATATYPE);
+        compsupport = sessinfo->has_feature(PROTOCOL_BINARY_FEATURE_SNAPPY);
         mutation_tokens = sessinfo->has_feature(PROTOCOL_BINARY_FEATURE_MUTATION_SEQNO);
     }
 
@@ -657,6 +657,7 @@ Server::handle_connected(lcbio_SOCKET *sock, lcb_error_t err, lcbio_OSERR syserr
     procs.cb_flush_ready = on_flush_ready;
     connctx = lcbio_ctx_new(sock, this, &procs);
     connctx->subsys = "memcached";
+    sock->service = LCBIO_SERVICE_KV;
     flush_start = (mcreq_flushstart_fn)mcserver_flush;
 
     uint32_t tmo = next_timeout();

@@ -24,11 +24,14 @@ namespace cbc {
     X(String, saslmech, "force-sasl-mech", 'S') \
     X(String, connstr, "spec", 'U') \
     X(String, ssl, "ssl", '\0') \
+    X(String, truststorepath, "truststorepath", '\0') \
     X(String, certpath, "certpath", '\0') \
+    X(String, keypath, "keypath", '\0') \
     X(UInt, timeout, "timeout", '\0') \
     X(Bool, timings, "timings", 'T') \
     X(Bool, verbose, "verbose", 'v') \
     X(Bool, dump, "dump", '\0') \
+    X(Bool, compress, "compress", 'y') \
     X(List, cparams, "cparam", 'D')
 
 
@@ -61,6 +64,8 @@ public:
     void addToParser(cliopts::Parser& parser);
     lcb_error_t doCtls(lcb_t instance);
     bool useTimings() { return o_timings.result(); }
+    int numTimings() { return o_timings.numSpecified(); }
+    cliopts::BoolOption& getTimings() { return o_timings; }
     void setAdminMode();
     bool shouldDump() { return o_dump.result(); }
     void writeConfig(const std::string& dest = getConfigfileName());

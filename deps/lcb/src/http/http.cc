@@ -20,6 +20,8 @@
 #include "http/http.h"
 #include "http/http-priv.h"
 #include "auth-priv.h"
+#include "trace.h"
+
 using namespace lcb::http;
 
 #define LOGFMT "<%s%s%s:%s> "
@@ -182,6 +184,7 @@ Request::finish(lcb_error_t error)
         return;
     }
 
+    TRACE_HTTP_END(this, error, parser->get_cur_response().status);
     status |= FINISHED;
 
     if (!(status & NOLCB)) {
@@ -216,7 +219,7 @@ lcb_error_t
 Request::submit()
 {
     lcb_error_t rc;
-    lcb_host_t reqhost = {0};
+    lcb_host_t reqhost = {"", "", 0};
 
     // Stop any pending socket/request
     close_io();
@@ -243,7 +246,8 @@ Request::submit()
     size_t path_len = url.size() - path_off;
     preamble.insert(preamble.end(),
         url_s + path_off, url_s + path_off + path_len);
-    lcb_log(LOGARGS(this, TRACE), LOGFMT "%s %s. Body=%lu bytes", LOGID(this), method_strings[method], url.c_str(), body.size());
+    lcb_log(LOGARGS(this, TRACE), LOGFMT "%s %s. Body=%lu bytes", LOGID(this), method_strings[method], url.c_str(),
+            (unsigned long int)body.size());
 
     add_to_preamble(" HTTP/1.1\r\n");
 
@@ -276,6 +280,7 @@ Request::submit()
         }
         response_headers.clear();
         response_headers_clist.clear();
+        TRACE_HTTP_BEGIN(this);
     }
 
     return rc;
@@ -427,14 +432,11 @@ Request::get_api_node(lcb_error_t &rc)
     return lcbvb_get_resturl(vbc, ix, svc, mode);
 }
 
-static bool is_nonempty(const char *s) {
-    return s != NULL && *s != '\0';
-}
-
 lcb_error_t
 Request::setup_inputs(const lcb_CMDHTTP *cmd)
 {
-    const char *base = NULL, *username, *password;
+    std::string username, password;
+    const char *base = NULL;
     size_t nbase = 0;
     lcb_error_t rc = LCB_SUCCESS;
 
@@ -442,8 +444,12 @@ Request::setup_inputs(const lcb_CMDHTTP *cmd)
         return LCB_EINVAL;
     }
 
-    username = cmd->username;
-    password = cmd->password;
+    if (cmd->username) {
+        username = cmd->username;
+    }
+    if (cmd->password) {
+        password = cmd->password;
+    }
 
     if (reqtype == LCB_HTTP_TYPE_RAW) {
         if ((base = cmd->host) == NULL) {
@@ -453,25 +459,40 @@ Request::setup_inputs(const lcb_CMDHTTP *cmd)
         if (cmd->host) {
             return LCB_EINVAL;
         }
-        if (cmd->cmdflags & LCB_CMDHTTP_F_NOUPASS) {
-            username = password = NULL;
-        } else if (username == NULL && password == NULL) {
-            const Authenticator& auth = *LCBT_SETTING(instance, auth);
-            if (reqtype == LCB_HTTP_TYPE_MANAGEMENT) {
-                username = auth.username().c_str();
-                password = auth.password().c_str();
-            } else {
-                username = auth.username_for(LCBT_SETTING(instance, bucket)).c_str();
-                password = auth.password_for(LCBT_SETTING(instance, bucket)).c_str();
-            }
-        }
-
         base = get_api_node(rc);
         if (base == NULL || *base == '\0') {
             if (rc == LCB_SUCCESS) {
                 return LCB_EINTERNAL;
             } else {
                 return rc;
+            }
+        }
+
+        if ((cmd->cmdflags & LCB_CMDHTTP_F_NOUPASS) || instance->settings->keypath) {
+            // explicitly asked to skip Authorization header,
+            // or using SSL client certificate to authenticate
+            username.clear();
+            password.clear();
+        } else if (username.empty() && password.empty()) {
+            const Authenticator& auth = *LCBT_SETTING(instance, auth);
+            if (reqtype == LCB_HTTP_TYPE_MANAGEMENT) {
+                username = auth.username();
+                password = auth.password();
+            } else {
+                if (auth.mode() == LCBAUTH_MODE_DYNAMIC) {
+                    struct http_parser_url info = {};
+                    if (_lcb_http_parser_parse_url(base, strlen(base), 0, &info)) {
+                        lcb_log(LOGARGS(this, WARN), LOGFMT "Failed to parse API endpoint", LOGID(this));
+                        return LCB_EINTERNAL;
+                    }
+                    std::string hh(base + info.field_data[UF_HOST].off, info.field_data[UF_HOST].len);
+                    std::string pp(base + info.field_data[UF_PORT].off, info.field_data[UF_PORT].len);
+                    username = auth.username_for(hh.c_str(), pp.c_str(), LCBT_SETTING(instance, bucket));
+                    password = auth.password_for(hh.c_str(), pp.c_str(), LCBT_SETTING(instance, bucket));
+                } else {
+                    username = auth.username_for(NULL, NULL, LCBT_SETTING(instance, bucket));
+                    password = auth.password_for(NULL, NULL, LCBT_SETTING(instance, bucket));
+                }
             }
         }
     }
@@ -487,7 +508,7 @@ Request::setup_inputs(const lcb_CMDHTTP *cmd)
         return rc;
     }
 
-    std::string ua("libcouchbase/" LCB_VERSION_STRING);
+    std::string ua(LCB_CLIENT_ID);
     if (instance->settings->client_string) {
         ua.append(" ").append(instance->settings->client_string);
     }
@@ -498,7 +519,7 @@ Request::setup_inputs(const lcb_CMDHTTP *cmd)
     }
 
     add_header("Accept", "application/json");
-    if (is_nonempty(password) && is_nonempty(username)) {
+    if (!username.empty()) {
         char auth[256];
         std::string upassbuf;
         upassbuf.append(username).append(":").append(password);
@@ -510,7 +531,7 @@ Request::setup_inputs(const lcb_CMDHTTP *cmd)
 
     if (!body.empty()) {
         char lenbuf[64];
-        sprintf(lenbuf, "%ld", body.size());
+        sprintf(lenbuf, "%lu", (unsigned long int)body.size());
         add_header("Content-Length", lenbuf);
         if (cmd->content_type) {
             add_header("Content-Type", cmd->content_type);

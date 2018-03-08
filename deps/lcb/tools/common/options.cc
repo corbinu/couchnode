@@ -77,9 +77,11 @@ ConnParams::ConnParams() :
     o_transport.description("Bootstrap protocol").argdesc("HTTP|CCCP|ALL").setDefault("ALL");
     o_configcache.description("Path to cached configuration");
     o_ssl.description("Enable SSL settings").argdesc("ON|OFF|NOVERIFY").setDefault("off");
-    o_certpath.description("Path to server certificate");
+    o_certpath.description("Path to server SSL certificate");
+    o_keypath.description("Path to client SSL private key");
     o_verbose.description("Set debugging output (specify multiple times for greater verbosity");
     o_dump.description("Dump verbose internal state after operations are done");
+    o_compress.description("Turn on compression of outgoing data (second time to force compression)").setDefault(false);
 
     o_cparams.description("Additional options for connection. "
         "Use -Dtimeout=SECONDS for KV operation timeout");
@@ -218,6 +220,8 @@ ConnParams::loadFileDefaults()
             o_connstr.setDefault(value).setPassed();
         } else if (key == "certpath") {
             o_certpath.setDefault(value).setPassed();
+        } else if (key == "keypath") {
+            o_keypath.setDefault(value).setPassed();
         } else if (key == "ssl") {
             o_ssl.setDefault(value).setPassed();
         } else {
@@ -259,7 +263,9 @@ ConnParams::writeConfig(const string& s)
     writeOption(f, o_user, "user");
     writeOption(f, o_passwd, "password");
     writeOption(f, o_ssl, "ssl");
+    writeOption(f, o_truststorepath, "truststorepath");
     writeOption(f, o_certpath, "certpath");
+    writeOption(f, o_keypath, "keypath");
 
     if (o_timeout.passed()) {
         f << "timeout=" << std::dec << o_timeout.result() << endl;
@@ -317,9 +323,19 @@ ConnParams::fillCropts(lcb_create_st& cropts)
         fprintf(stderr, "  Specifying the default port (8091) has no effect\n");
     }
 
+    if (o_truststorepath.passed()) {
+        connstr += "truststorepath=";
+        connstr += o_truststorepath.result();
+        connstr += '&';
+    }
     if (o_certpath.passed()) {
         connstr += "certpath=";
         connstr += o_certpath.result();
+        connstr += '&';
+    }
+    if (o_keypath.passed()) {
+        connstr += "keypath=";
+        connstr += o_keypath.result();
         connstr += '&';
     }
     if (o_ssl.passed()) {
@@ -417,6 +433,17 @@ ConnParams::doCtls(lcb_t instance)
 
         // Set the detailed error codes option
         doSctl<int>(instance, LCB_CNTL_DETAILED_ERRCODES, 1);
+
+        {
+            int opts = LCB_COMPRESS_IN;
+            if (o_compress.passed()) {
+                opts |= LCB_COMPRESS_OUT;
+                if (o_compress.numSpecified() > 1) {
+                    opts |= LCB_COMPRESS_FORCE;
+                }
+            }
+            doPctl(instance, LCB_CNTL_COMPRESSION_OPTS, &opts);
+        }
     } catch (lcb_error_t &err) {
         return err;
     }

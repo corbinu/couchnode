@@ -25,6 +25,9 @@ IF(DTRACE)
     ADD_DEFINITIONS(-DHAVE_DTRACE)
     IF(NOT APPLE)
         SET(LCB_DTRACE_OBJECT "${LCB_GENSRCDIR}/probes.o")
+        IF(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+            SET(LCB_DTRACE_OPTIONS "-k")
+        ENDIF()
         # Generate probes.o
         IF(CMAKE_SYSTEM_NAME STREQUAL "SunOS" OR CMAKE_SYSTEM_NAME STREQUAL "FreeBSD")
             SET(LCB_DTRACE_INSTRO ON)
@@ -34,5 +37,16 @@ IF(DTRACE)
                 DEPENDS ${LCB_DTRACE_SRC}
                 COMMAND ${DTRACE} -C -G ${LCB_DTRACE_OPTIONS} -s ${LCB_DTRACE_SRC} -o ${LCB_DTRACE_OBJECT})
         ENDIF()
+    ENDIF()
+
+    FIND_PROGRAM(STAP stap)
+    IF(STAP)
+      SET(LCB_TAPSET_ROOT /usr/share/systemtap/tapset)
+      CONFIGURE_FILE(
+        ${PROJECT_SOURCE_DIR}/cmake/libcouchbase.stp.in
+        ${LCB_GENSRCDIR}/libcouchbase.so.${LCB_SONAME_FULL}.stp)
+      INSTALL(
+        FILES ${LCB_GENSRCDIR}/libcouchbase.so.${LCB_SONAME_FULL}.stp
+        DESTINATION ${LCB_TAPSET_ROOT})
     ENDIF()
 ENDIF()

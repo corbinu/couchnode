@@ -132,8 +132,14 @@ HANDLER(get_changeset) {
 HANDLER(ssl_mode_handler) {
     RETURN_GET_ONLY(int, LCBT_SETTING(instance, sslopts))
 }
+HANDLER(ssl_truststorepath_handler) {
+    RETURN_GET_ONLY(char*, LCBT_SETTING(instance, truststorepath))
+}
 HANDLER(ssl_certpath_handler) {
     RETURN_GET_ONLY(char*, LCBT_SETTING(instance, certpath))
+}
+HANDLER(ssl_keypath_handler) {
+    RETURN_GET_ONLY(char*, LCBT_SETTING(instance, keypath))
 }
 HANDLER(htconfig_urltype_handler) {
     RETURN_GET_SET(int, LCBT_SETTING(instance, bc_http_urltype));
@@ -200,6 +206,12 @@ HANDLER(select_bucket_handler) {
 }
 HANDLER(send_hello_handler) {
     RETURN_GET_SET(int, LCBT_SETTING(instance, send_hello));
+}
+HANDLER(log_redaction_handler) {
+    RETURN_GET_SET(int, LCBT_SETTING(instance, log_redaction));
+}
+HANDLER(enable_tracing_handler) {
+    RETURN_GET_SET(int, LCBT_SETTING(instance, use_tracing));
 }
 HANDLER(config_poll_interval_handler) {
     lcb_U32 *user = reinterpret_cast<lcb_U32*>(arg);
@@ -528,6 +540,9 @@ HANDLER(n1ql_cache_clear_handler) {
 HANDLER(bucket_auth_handler) {
     const lcb_BUCKETCRED *cred;
     if (mode == LCB_CNTL_SET) {
+        if (LCBT_SETTING(instance, keypath)) {
+            return LCB_ECTL_UNSUPPMODE;
+        }
         /* Parse the bucket string... */
         cred = (const lcb_BUCKETCRED *)arg;
         return lcbauth_add_pass(instance->settings->auth, (*cred)[0], (*cred)[1], LCBAUTH_F_BUCKET);
@@ -570,6 +585,9 @@ HANDLER(metrics_handler) {
     (void)cmd;
 }
 
+HANDLER(collections_handler) {
+    RETURN_GET_SET(int, LCBT_SETTING(instance, use_collections));
+}
 
 static ctl_handler handlers[] = {
     timeout_common, /* LCB_CNTL_OP_TIMEOUT */
@@ -607,7 +625,7 @@ static ctl_handler handlers[] = {
     init_providers, /* LCB_CNTL_CONFIG_ALL_NODES */
     config_cache_handler, /* LCB_CNTL_CONFIGCACHE */
     ssl_mode_handler, /* LCB_CNTL_SSL_MODE */
-    ssl_certpath_handler, /* LCB_CNTL_SSL_CAPATH */
+    ssl_certpath_handler, /* LCB_CNTL_SSL_CERT */
     retrymode_handler, /* LCB_CNTL_RETRYMODE */
     htconfig_urltype_handler, /* LCB_CNTL_HTCONFIG_URLTYPE */
     compmode_handler, /* LCB_CNTL_COMPRESSION_OPTS */
@@ -645,7 +663,12 @@ static ctl_handler handlers[] = {
     config_poll_interval_handler, /* LCB_CNTL_CONFIG_POLL_INTERVAL */
     send_hello_handler, /* LCB_CNTL_SEND_HELLO */
     buckettype_handler, /* LCB_CNTL_BUCKETTYPE */
-    metrics_handler /* LCB_CNTL_METRICS */
+    metrics_handler, /* LCB_CNTL_METRICS */
+    collections_handler, /* LCB_CNTL_USE_COLLECTIONS */
+    ssl_keypath_handler, /* LCB_CNTL_SSL_KEY */
+    log_redaction_handler, /* LCB_CNTL_LOG_REDACTION */
+    ssl_truststorepath_handler, /* LCB_CNTL_SSL_TRUSTSTORE */
+    enable_tracing_handler, /* LCB_CNTL_ENABLE_TRACING */
 };
 
 /* Union used for conversion to/from string functions */
@@ -816,6 +839,8 @@ static cntl_OPCODESTRS stropcode_map[] = {
         {"send_hello", LCB_CNTL_SEND_HELLO, convert_intbool},
         {"ipv6", LCB_CNTL_IP6POLICY, convert_ipv6},
         {"metrics", LCB_CNTL_METRICS, convert_intbool },
+        {"log_redaction", LCB_CNTL_LOG_REDACTION, convert_intbool},
+        {"enable_tracing", LCB_CNTL_ENABLE_TRACING, convert_intbool},
         {NULL, -1}
 };
 

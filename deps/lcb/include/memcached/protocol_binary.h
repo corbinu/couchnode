@@ -69,8 +69,16 @@ extern "C"
      * See section 3.1 Magic byte
      */
     typedef enum {
+        /* Request packet from client to server */
         PROTOCOL_BINARY_REQ = 0x80,
-        PROTOCOL_BINARY_RES = 0x81
+        /* Response packet from server to client */
+        PROTOCOL_BINARY_RES = 0x81,
+        /* Response packet from server to client containing frame extras */
+        PROTOCOL_BINARY_ARES = 0x18,
+        /* Request packet from server to client */
+        PROTOCOL_BINARY_SREQ = 0x82,
+        /* Response packet from client to server */
+        PROTOCOL_BINARY_SRES = 0x83
     } protocol_binary_magic;
 
     /**
@@ -151,6 +159,11 @@ extern "C"
          * XATTR.
          */
         PROTOCOL_BINARY_RESPONSE_XATTR_EINVAL = 0x87,
+
+        /**
+         * Operation attempted with an unknown collection.
+         */
+        PROTOCOL_BINARY_RESPONSE_UNKNOWN_COLLECTION = 0x88,
 
         /*
          * Sub-document specific responses.
@@ -706,28 +719,45 @@ extern "C"
      * Definition of hello's features.
      */
     typedef enum {
-        PROTOCOL_BINARY_FEATURE_DATATYPE = 0x01,
+        PROTOCOL_BINARY_FEATURE_INVALID = 0x01,
         PROTOCOL_BINARY_FEATURE_TLS = 0x2,
         PROTOCOL_BINARY_FEATURE_TCPNODELAY = 0x03,
         PROTOCOL_BINARY_FEATURE_MUTATION_SEQNO = 0x04,
         PROTOCOL_BINARY_FEATURE_TCPDELAY = 0x05,
         PROTOCOL_BINARY_FEATURE_XATTR = 0x06,
         PROTOCOL_BINARY_FEATURE_XERROR = 0x07,
-        PROTOCOL_BINARY_FEATURE_SELECT_BUCKET = 0x08
+        PROTOCOL_BINARY_FEATURE_SELECT_BUCKET = 0x08,
+        PROTOCOL_BINARY_FEATURE_COLLECTIONS = 0x09,
+        PROTOCOL_BINARY_FEATURE_SNAPPY = 0x0a,
+        PROTOCOL_BINARY_FEATURE_JSON = 0x0b,
+        PROTOCOL_BINARY_FEATURE_DUPLEX = 0x0c,
+        PROTOCOL_BINARY_FEATURE_CLUSTERMAP_CHANGE_NOTIFICATION = 0x0d,
+        PROTOCOL_BINARY_FEATURE_UNORDERED_EXECUTION = 0x0e,
+        PROTOCOL_BINARY_FEATURE_TRACING = 0x0f
     } protocol_binary_hello_features;
 
-    #define MEMCACHED_FIRST_HELLO_FEATURE 0x01
-    #define MEMCACHED_TOTAL_HELLO_FEATURES 10
+#define MEMCACHED_FIRST_HELLO_FEATURE 0x01
+#define MEMCACHED_TOTAL_HELLO_FEATURES 15
 
+    // clang-format off
 #define protocol_feature_2_text(a) \
-    (a == PROTOCOL_BINARY_FEATURE_DATATYPE) ? "Datatype" : \
+    (a == PROTOCOL_BINARY_FEATURE_INVALID) ? "Invalid" : \
     (a == PROTOCOL_BINARY_FEATURE_TLS) ? "TLS" : \
-    (a == PROTOCOL_BINARY_FEATURE_TCPNODELAY) ? "TCP NODELAY" : \
+    (a == PROTOCOL_BINARY_FEATURE_TCPNODELAY) ? "TCP nodelay" : \
     (a == PROTOCOL_BINARY_FEATURE_MUTATION_SEQNO) ? "Mutation seqno" : \
-    (a == PROTOCOL_BINARY_FEATURE_TCPDELAY) ? "TCP DELAY" : \
+    (a == PROTOCOL_BINARY_FEATURE_TCPDELAY) ? "TCP delay" : \
     (a == PROTOCOL_BINARY_FEATURE_XATTR) ? "XATTR" : \
-    (a == PROTOCOL_BINARY_FEATURE_XERROR) ? "Error Map": \
-    (a == PROTOCOL_BINARY_FEATURE_SELECT_BUCKET) ? "Select Bucket": "Unknown"
+    (a == PROTOCOL_BINARY_FEATURE_XERROR) ? "XERROR": \
+    (a == PROTOCOL_BINARY_FEATURE_SELECT_BUCKET) ? "Select bucket": \
+    (a == PROTOCOL_BINARY_FEATURE_COLLECTIONS) ? "Collections": \
+    (a == PROTOCOL_BINARY_FEATURE_SNAPPY) ? "Snappy": \
+    (a == PROTOCOL_BINARY_FEATURE_JSON) ? "JSON": \
+    (a == PROTOCOL_BINARY_FEATURE_DUPLEX) ? "Duplex": \
+    (a == PROTOCOL_BINARY_FEATURE_CLUSTERMAP_CHANGE_NOTIFICATION) ? "Clustermap change notification": \
+    (a == PROTOCOL_BINARY_FEATURE_UNORDERED_EXECUTION) ? "Unordered execution": \
+    (a == PROTOCOL_BINARY_FEATURE_TRACING) ? "Tracing": \
+    "Unknown"
+    // clang-format on
 
     /**
      * The HELLO command is used by the client and the server to agree
