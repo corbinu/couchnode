@@ -158,14 +158,13 @@ void zipkin_report(lcbtrace_TRACER *tracer, lcbtrace_SPAN *span)
                 buf[nbuf] = '\0';
                 cJSON_AddItemToObject(tags, LCBTRACE_TAG_DB_INSTANCE, cJSON_CreateString(buf));
             }
-            if (cJSON_GetArraySize(tags) > 0)  {
+            if (cJSON_GetArraySize(tags) > 0) {
                 cJSON_AddItemToObject(json, "tags", tags);
             } else {
                 cJSON_Delete(tags);
             }
         }
         free(buf);
-
 
         payload->data = cJSON_PrintUnformatted(json);
         cJSON_Delete(json);
