@@ -3,11 +3,11 @@
 var assert = require('assert');
 var harness = require('./harness.js');
 
-describe('#crud', function () {
+describe('#crud', function() {
   function allTests(H) {
     it('should properly round-trip binary', function(done) {
       var key = H.key();
-      var data = new Buffer([3,2,4,1]);
+      var data = Buffer.from([3, 2, 4, 1]);
       H.b.insert(key, data, H.okCallback(function() {
         H.b.get(key, H.okCallback(function(res) {
           assert(Buffer.isBuffer(res.value));
@@ -18,7 +18,7 @@ describe('#crud', function () {
     });
     it('should properly round-trip json', function(done) {
       var key = H.key();
-      var data = {x:1,y:{z:2}};
+      var data = { x: 1, y: { z: 2 } };
       H.b.insert(key, data, H.okCallback(function() {
         H.b.get(key, H.okCallback(function(res) {
           assert.deepEqual(res.value, data);
@@ -49,7 +49,7 @@ describe('#crud', function () {
         return doc.value;
       });
       // test object much be binary to be inserted by binding
-      var data = new Buffer('test', 'utf8');
+      var data = Buffer.from('test', 'utf8');
       var key = H.key();
       b.insert(key, data, H.okCallback(function() {
         b.get(key, H.okCallback(function() {
@@ -67,7 +67,7 @@ describe('#crud', function () {
         encoderCalled = true;
         return { value: doc, flags: 50000 };
       });
-      var data = new Buffer('test', 'utf8');
+      var data = Buffer.from('test', 'utf8');
       var key = H.key();
       b.insert(key, data, H.okCallback(function() {
         assert(encoderCalled);

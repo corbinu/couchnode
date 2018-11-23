@@ -34,7 +34,6 @@ function _getMockJar(callback) {
 
       console.log('downloading ' + mockurl + ' to ' + mockpath);
 
-
       var file = fs.createWriteStream(mockpath);
       var request = http.get(mockurl, function(res) {
         if (res.statusCode !== 200) {
@@ -59,9 +58,9 @@ function _bufferIndexOf(buffer, search) {
     return buffer.indexOf(search);
   } else {
     if (typeof search === 'string') {
-      search = new Buffer(search);
+      search = Buffer.from(search);
     } else if (typeof search === 'number' && !isNaN(search)) {
-      search = new Buffer([search]);
+      search = Buffer.from([search]);
     }
     for (var i = 0; i < buffer.length; ++i) {
       if (buffer[i] === search[0]) {
@@ -106,7 +105,7 @@ function _startMock(mockpath, options, callback) {
     }
   }
 
-  var server = net.createServer(function (socket) {
+  var server = net.createServer(function(socket) {
     // Close the socket immediately
     server.close();
 
@@ -192,8 +191,8 @@ function _startMock(mockpath, options, callback) {
           bucketInfo += ',';
         }
         bucketInfo += bname +
-            ':' + (binfo.password?binfo.password:'') +
-            ':' + (binfo.type?binfo.type:'');
+          ':' + (binfo.password ? binfo.password : '') +
+          ':' + (binfo.type ? binfo.type : '');
       }
     }
 

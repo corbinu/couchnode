@@ -8,15 +8,20 @@ var assert = require('assert');
 
 // We enable logging to ensure that logging doesn't break any of the tests,
 // but we explicitly disable all output sources to avoid spamming anything.
-couchbase.logging.enableLogging({console: false, filename: false});
+couchbase.logging.enableLogging({
+  console: false,
+  filename: false
+});
 
 var config = {
   connstr: '',
-  bucket : 'default',
-  bpass  : '',
-  muser  : 'Administrator',
-  mpass  : 'administrator',
-  qhosts : null
+  bucket: 'default',
+  bpass: '',
+  user: '',
+  pass: '',
+  muser: 'Administrator',
+  mpass: 'administrator',
+  qhosts: null
 };
 
 if (process.env.CNCSTR !== undefined) {
@@ -31,6 +36,12 @@ if (process.env.CNBUCKET !== undefined) {
 if (process.env.CNBPASS !== undefined) {
   config.bpass = process.env.CNBPASS;
 }
+if (process.env.CNUSER !== undefined) {
+  config.user = process.env.CNUSER;
+}
+if (process.env.CNPASS !== undefined) {
+  config.pass = process.env.CNPASS;
+}
 if (process.env.CNMUSER !== undefined) {
   config.muser = process.env.CNMUSER;
 }
@@ -39,6 +50,7 @@ if (process.env.CNMPASS !== undefined) {
 }
 
 var configWaits = [];
+
 function _waitForConfig(callback) {
   if (!configWaits) {
     setImmediate(callback);
@@ -155,15 +167,26 @@ function RealHarness() {
     this.mockInst = config.mockInst;
     this.connstr = config.connstr;
     this.bucket = config.bucket;
+    this.user = config.user;
+    this.pass = config.pass;
     this.qhosts = config.qhosts;
     this.bpass = config.bpass;
     this.muser = config.muser;
     this.mpass = config.mpass;
 
     this.c = new this.lib.Cluster(this.connstr);
+    if (this.user || this.pass) {
+      this.c.authenticate(this.user, this.pass);
+    }
     this.b = this.c.openBucket(this.bucket);
     if (this.qhosts) {
       this.b.enableN1ql(this.qhosts);
+    }
+  }.bind(this));
+
+  after(function() {
+    if (this.b) {
+      this.b.disconnect();
     }
   }.bind(this));
 }
