@@ -7,8 +7,19 @@ var http = require('http');
 var net = require('net');
 var child_process = require('child_process');
 
-var defaultMockFile = 'CouchbaseMock-1.5.15.jar';
+var defaultMockVersion = [1, 5, 15];
+var defaultMockVersionStr =
+  defaultMockVersion[0] + '.' +
+  defaultMockVersion[1] + '.' +
+  defaultMockVersion[2];
+var defaultMockFile = 'CouchbaseMock-' + defaultMockVersionStr + '.jar';
 var defaultMockUrlBase = 'http://packages.couchbase.com/clients/c/mock/';
+
+function _getMockVer() {
+  return defaultMockVersion;
+}
+
+module.exports.version = _getMockVer;
 
 function _getMockJar(callback) {
   var mockpath = path.join(os.tmpdir(), defaultMockFile);
@@ -159,6 +170,9 @@ function _startMock(mockpath, options, callback) {
         break;
       }
     });
+    socket.on('error', function(err) {
+      // console.log('mocksock err', err);
+    });
     socket.command = function(cmdName, payload, callback) {
       if (callback === undefined) {
         callback = payload;
@@ -175,7 +189,7 @@ function _startMock(mockpath, options, callback) {
     socket.close = function() {
       socket.end();
     };
-    console.log('got server connection');
+    console.log('got mock server connection');
   });
   server.on('error', function(err) {
     callback(err);
@@ -215,13 +229,12 @@ function _startMock(mockpath, options, callback) {
       return;
     });
     mockproc.stderr.on('data', function(data) {
-      //console.log('mockerr: ' + data.toString());
+      //console.log('mockproc err: ' + data.toString());
     });
     mockproc.on('close', function(code) {
       if (code !== 0 && code !== 1) {
         console.log('mock closed with non-zero exit code: ' + code);
       }
-      mockproc.close();
       server.close();
     });
 
