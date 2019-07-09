@@ -1,6 +1,6 @@
 /* -*- Mode: C; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2018 Couchbase, Inc.
+ *     Copyright 2018-2019 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -29,7 +29,6 @@
 #include <string.h>
 
 #include <libcouchbase/couchbase.h>
-#include <libcouchbase/n1ql.h>
 
 #include "queries.h"
 #include "cJSON.h"
@@ -40,7 +39,7 @@ static void fail(const char *msg)
     exit(EXIT_FAILURE);
 }
 
-static void check(lcb_error_t err, const char *msg)
+static void check(lcb_STATUS err, const char *msg)
 {
     if (err != LCB_SUCCESS) {
         char buf[1024] = {0};
@@ -49,7 +48,7 @@ static void check(lcb_error_t err, const char *msg)
     }
 }
 
-static int err2color(lcb_error_t err)
+static int err2color(lcb_STATUS err)
 {
     switch (err) {
         case LCB_SUCCESS:
@@ -59,19 +58,29 @@ static int err2color(lcb_error_t err)
     }
 }
 
-static void row_callback(lcb_t instance, int type, const lcb_RESPN1QL *resp)
+static void row_callback(lcb_INSTANCE *instance, int type, const lcb_RESPANALYTICS *resp)
 {
-    int *idx = (int *)resp->cookie;
-    if (resp->rc != LCB_SUCCESS) {
-        printf("\x1b[31m%s\x1b[0m", lcb_strerror_short(resp->rc));
-        if (resp->htresp) {
-            printf(", HTTP status: %d", resp->htresp->htstatus);
+    int *idx;
+    const char *row;
+    size_t nrow;
+    lcb_STATUS rc = lcb_respanalytics_status(resp);
+
+    lcb_respanalytics_cookie(resp, (void **)&idx);
+    lcb_respanalytics_row(resp, &row, &nrow);
+    if (rc != LCB_SUCCESS) {
+        const lcb_RESPHTTP *http;
+        printf("\x1b[31m%s\x1b[0m", lcb_strerror_short(rc));
+        lcb_respanalytics_http_response(resp, &http);
+        if (http) {
+            uint16_t status;
+            lcb_resphttp_http_status(http, &status);
+            printf(", HTTP status: %d", (int)status);
         }
         printf("\n");
-        if (resp->nrow) {
+        if (nrow) {
             cJSON *json;
-            char *data = calloc(resp->nrow + 1, sizeof(char));
-            memcpy(data, resp->row, resp->nrow);
+            char *data = calloc(nrow + 1, sizeof(char));
+            memcpy(data, row, nrow);
             json = cJSON_Parse(data);
             if (json && json->type == cJSON_Object) {
                 cJSON *errors = cJSON_GetObjectItem(json, "errors");
@@ -95,21 +104,21 @@ static void row_callback(lcb_t instance, int type, const lcb_RESPN1QL *resp)
             free(data);
         }
     }
-    if (resp->rflags & LCB_RESP_F_FINAL) {
+    if (lcb_respanalytics_is_final(resp)) {
         printf("\x1b[1mMETA:\x1b[0m ");
     } else {
         printf("\x1b[1mR%d:\x1b[0m ", (*idx)++);
     }
-    printf("%.*s\n", (int)resp->nrow, (char *)resp->row);
-    if (resp->rflags & LCB_RESP_F_FINAL) {
+    printf("%.*s\n", (int)nrow, (char *)row);
+    if (lcb_respanalytics_is_final(resp)) {
         printf("\n");
     }
 }
 
 int main(int argc, char *argv[])
 {
-    lcb_error_t err;
-    lcb_t instance;
+    lcb_STATUS err;
+    lcb_INSTANCE *instance;
     char *bucket = NULL;
     size_t ii;
 
@@ -139,16 +148,15 @@ int main(int argc, char *argv[])
     }
 
     for (ii = 0; ii < num_queries; ii++) {
-        lcb_CMDN1QL cmd = {0};
+        lcb_CMDANALYTICS *cmd;
         int idx = 0;
-        /* NOTE: with this flag, the request will be issued to Analytics service */
-        cmd.cmdflags = LCB_CMDN1QL_F_ANALYTICSQUERY;
-        cmd.callback = row_callback;
-        cmd.query = queries[ii].query;
-        cmd.nquery = queries[ii].query_len;
-        check(lcb_n1ql_query(instance, &idx, &cmd), "schedule analytics query");
+        lcb_cmdanalytics_create(&cmd);
+        lcb_cmdanalytics_callback(cmd, row_callback);
+        lcb_cmdanalytics_query(cmd, queries[ii].query, queries[ii].query_len);
+        check(lcb_analytics(instance, &idx, cmd), "schedule analytics query");
         printf("----> \x1b[1m%s\x1b[0m\n", queries[ii].comment);
         printf("----> \x1b[36m%.*s\x1b[0m\n", (int)queries[ii].query_len, queries[ii].query);
+        lcb_cmdanalytics_destroy(cmd);
         lcb_wait(instance);
     }
 
