@@ -3,10 +3,8 @@
 using namespace LCBTest;
 using std::string;
 using std::vector;
-class SockMgrTest : public SockTest
-{
-    void SetUp()
-    {
+class SockMgrTest : public SockTest {
+    void SetUp() {
         SockTest::SetUp();
         loop->sockpool->get_options().maxidle = 2;
         loop->sockpool->get_options().tmoidle = LCB_MS2US(2000);
@@ -98,8 +96,7 @@ struct PCtxDummy : lcbio_PROTOCTX {
     bool shouldDelete;
 };
 extern "C" {
-static void protoctx_dtor(lcbio_PROTOCTX *ctx)
-{
+static void protoctx_dtor(lcbio_PROTOCTX *ctx) {
     PCtxDummy *d = (PCtxDummy *)ctx;
     if (d->shouldDelete) {
         delete d;

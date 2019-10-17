@@ -1,6 +1,6 @@
 /* -*- Mode: C; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2012-2019 Couchbase, Inc.
+ *     Copyright 2012 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -18,8 +18,6 @@
 #define LCBDUR_PRIV_SYMS 1
 #define NOMINMAX
 
-#include <cstring>
-
 #include "internal.h"
 #include "durability_internal.h"
 #include <algorithm>
@@ -32,9 +30,10 @@ using namespace lcb::durability;
 
 static void timer_callback(lcb_socket_t sock, short which, void *arg);
 
-bool Item::is_all_done() const
+bool
+Item::is_all_done() const
 {
-    const lcb_DURABILITYOPTSv0 &opts = parent->opts;
+    const lcb_DURABILITYOPTSv0& opts = parent->opts;
 
     if (!res().exists_master) {
         /** Primary cache doesn't have correct version */
@@ -58,7 +57,8 @@ bool Item::is_all_done() const
     return true;
 }
 
-bool Item::is_server_done(const ServerInfo &info, bool is_master) const
+bool
+Item::is_server_done(const ServerInfo &info, bool is_master) const
 {
     // Item not in cache. Return false
     if (!info.exists) {
@@ -84,10 +84,11 @@ bool Item::is_server_done(const ServerInfo &info, bool is_master) const
     return false;
 }
 
-size_t Item::prepare(uint16_t ixarray[4])
+size_t
+Item::prepare(uint16_t ixarray[4])
 {
     size_t oix = 0, maxix = 0;
-    lcb_INSTANCE *instance = parent->instance;
+    lcb_t instance = parent->instance;
 
     res().persisted_master = 0;
     res().exists_master = 0;
@@ -104,7 +105,7 @@ size_t Item::prepare(uint16_t ixarray[4])
 
     for (size_t ii = 0; ii < maxix; ii++) {
         int cur_ix;
-        ServerInfo &info = sinfo[ii];
+        ServerInfo& info = sinfo[ii];
 
         cur_ix = lcbvb_vbserver(LCBT_VBCONFIG(instance), vbid, ii);
         if (cur_ix < 0) {
@@ -116,7 +117,7 @@ size_t Item::prepare(uint16_t ixarray[4])
         if (s_exp != info.server) {
             info.clear();
 
-        } else if (is_server_done(info, ii == 0)) {
+        } else if (is_server_done(info, ii==0)) {
             /* Update counters as required */
             if (ii == 0) {
                 res().exists_master = 1;
@@ -140,7 +141,8 @@ size_t Item::prepare(uint16_t ixarray[4])
     return oix;
 }
 
-void Item::update(int flags, int srvix)
+void
+Item::update(int flags, int srvix)
 {
     if (!flags || done) {
         return;
@@ -148,12 +150,11 @@ void Item::update(int flags, int srvix)
 
     ServerInfo *info = get_server_info(srvix);
     if (!info) {
-        lcb_log(LOGARGS(parent, DEBUG), "Ignoring response from server %d. Not a master or replica for vBucket %d",
-                srvix, vbid);
+        lcb_log(LOGARGS(parent, DEBUG), "Ignoring response from server %d. Not a master or replica for vBucket %d", srvix, vbid);
         return;
     }
 
-    lcb_INSTANCE *instance = parent->instance;
+    lcb_t instance = parent->instance;
     bool is_master = lcbvb_vbmaster(LCBT_VBCONFIG(instance), vbid) == srvix;
     const lcb::Server *server = instance->get_server(srvix);
 
@@ -182,12 +183,13 @@ void Item::update(int flags, int srvix)
     }
 }
 
-ServerInfo *Item::get_server_info(int srvix)
+ServerInfo *
+Item::get_server_info(int srvix)
 {
     size_t ii;
-    lcb_INSTANCE *instance = parent->instance;
+    lcb_t instance = parent->instance;
 
-    for (ii = 0; ii < LCBT_NREPLICAS(instance) + 1; ii++) {
+    for (ii = 0; ii < LCBT_NREPLICAS(instance)+1; ii++) {
         int ix = lcbvb_vbserver(LCBT_VBCONFIG(instance), vbid, ii);
         if (ix > -1 && ix == srvix) {
             return &sinfo[ii];
@@ -196,10 +198,11 @@ ServerInfo *Item::get_server_info(int srvix)
     return NULL;
 }
 
-void Item::finish()
+void
+Item::finish()
 {
     lcb_RESPCALLBACK cb;
-    lcb_INSTANCE *instance;
+    lcb_t instance;
 
     if (done) {
         return;
@@ -213,7 +216,7 @@ void Item::finish()
     instance = parent->instance;
 
     if (parent->is_durstore) {
-        lcb_RESPSTORE resp = {0};
+        lcb_RESPSTOREDUR resp = { 0 };
         resp.key = result.key;
         resp.nkey = result.nkey;
         resp.rc = result.rc;
@@ -222,11 +225,11 @@ void Item::finish()
         resp.store_ok = 1;
         resp.dur_resp = &result;
 
-        cb = lcb_find_callback(instance, LCB_CALLBACK_STORE);
-        cb(instance, LCB_CALLBACK_STORE, (lcb_RESPBASE *)&resp);
+        cb = lcb_find_callback(instance, LCB_CALLBACK_STOREDUR);
+        cb(instance, LCB_CALLBACK_STOREDUR, (lcb_RESPBASE*)&resp);
     } else {
         cb = lcb_find_callback(instance, LCB_CALLBACK_ENDURE);
-        cb(instance, LCB_CALLBACK_ENDURE, (lcb_RESPBASE *)&result);
+        cb(instance, LCB_CALLBACK_ENDURE, (lcb_RESPBASE*)&result);
     }
 
     if (parent->nremaining == 0) {
@@ -237,7 +240,8 @@ void Item::finish()
 /**
  * Called when the last (primitive) OBSERVE response is received for the entry.
  */
-void Durset::on_poll_done()
+void
+Durset::on_poll_done()
 {
     lcb_assert(waiting || ("Got NULL callback twice!" && 0));
 
@@ -245,11 +249,13 @@ void Durset::on_poll_done()
 
     if (nremaining > 0) {
         switch_state(STATE_OBSPOLL);
+#ifdef LCB_TRACING
     } else {
         if (span) {
             lcbtrace_span_finish(span, LCBTRACE_NOW);
             span = NULL;
         }
+#endif
     }
     decref();
 }
@@ -259,9 +265,10 @@ void Durset::on_poll_done()
  * The `initial` parameter determines if this is a retry or if this is the
  * initial scheduling.
  */
-void Durset::poll()
+void
+Durset::poll()
 {
-    lcb_STATUS err;
+    lcb_error_t err;
 
     /* We should never be called while an 'iter' operation is still in progress */
     lcb_assert(waiting == 0);
@@ -280,12 +287,16 @@ void Durset::poll()
 }
 
 LIBCOUCHBASE_API
-lcb_STATUS lcb_durability_validate(lcb_INSTANCE *instance, lcb_U16 *persist_to, lcb_U16 *replicate_to, int options)
+lcb_error_t
+lcb_durability_validate(lcb_t instance,
+    lcb_U16 *persist_to, lcb_U16 *replicate_to, int options)
 {
     if (!LCBT_VBCONFIG(instance)) {
         return LCB_CLIENT_ENOCONF;
     }
-    int replica_max = std::min(LCBT_NREPLICAS(instance), LCBT_NDATASERVERS(instance) - 1);
+    int replica_max = std::min(
+        LCBT_NREPLICAS(instance),
+        LCBT_NDATASERVERS(instance)-1);
     int persist_max = replica_max + 1;
 
     if (*persist_to == 0 && *replicate_to == 0) {
@@ -294,7 +305,7 @@ lcb_STATUS lcb_durability_validate(lcb_INSTANCE *instance, lcb_U16 *persist_to, 
     }
 
     /* persist_max is always one more than replica_max */
-    if (static_cast< int >(*persist_to) > persist_max) {
+    if (static_cast<int>(*persist_to) > persist_max) {
         if (options & LCB_DURABILITY_VALIDATE_CAPMAX) {
             *persist_to = persist_max;
         } else {
@@ -311,7 +322,7 @@ lcb_STATUS lcb_durability_validate(lcb_INSTANCE *instance, lcb_U16 *persist_to, 
     }
 
     /* now, we need at least as many nodes as we have replicas */
-    if (static_cast< int >(*replicate_to) > replica_max) {
+    if (static_cast<int>(*replicate_to) > replica_max) {
         if (options & LCB_DURABILITY_VALIDATE_CAPMAX) {
             *replicate_to = replica_max;
         } else {
@@ -319,24 +330,27 @@ lcb_STATUS lcb_durability_validate(lcb_INSTANCE *instance, lcb_U16 *persist_to, 
         }
     }
     return LCB_SUCCESS;
+
 }
 
+#ifdef LCB_TRACING
 void Durset::MCTX_setspan(lcbtrace_SPAN *span_)
 {
     span = span_;
 }
+#endif
 
-lcb_STATUS Durset::MCTX_addcmd(const lcb_CMDBASE *cmd)
-{
+lcb_error_t Durset::MCTX_addcmd(const lcb_CMDBASE *cmd) {
     if (LCB_KEYBUF_IS_EMPTY(&cmd->key)) {
         return LCB_EMPTY_KEY;
     }
 
     entries.resize(entries.size() + 1);
-    Item &ent = entries.back();
+    Item& ent = entries.back();
 
     int vbid, srvix;
-    mcreq_map_key(&instance->cmdq, &cmd->key, MCREQ_PKT_BASESIZE, &vbid, &srvix);
+    mcreq_map_key(&instance->cmdq, &cmd->key, &cmd->_hashkey,
+        MCREQ_PKT_BASESIZE, &vbid, &srvix);
 
     /* ok. now let's initialize the entry..*/
     ent.res().nkey = cmd->key.contig.nbytes;
@@ -344,14 +358,15 @@ lcb_STATUS Durset::MCTX_addcmd(const lcb_CMDBASE *cmd)
     ent.parent = this;
     ent.vbid = vbid;
 
-    kvbufs.append(reinterpret_cast< const char * >(cmd->key.contig.bytes), cmd->key.contig.nbytes);
+    kvbufs.append(reinterpret_cast<const char *>(cmd->key.contig.bytes),
+                  cmd->key.contig.nbytes);
 
-    return after_add(ent, reinterpret_cast< const lcb_CMDENDURE * >(cmd));
+    return after_add(ent, reinterpret_cast<const lcb_CMDENDURE*>(cmd));
 }
 
-lcb_STATUS Durset::MCTX_done(const void *cookie_)
-{
-    lcb_STATUS err;
+lcb_error_t
+Durset::MCTX_done(const void *cookie_) {
+    lcb_error_t err;
     const char *kptr = kvbufs.c_str();
 
     if (entries.empty()) {
@@ -360,7 +375,7 @@ lcb_STATUS Durset::MCTX_done(const void *cookie_)
     }
 
     for (size_t ii = 0; ii < entries.size(); ii++) {
-        Item *ent = &entries[ii];
+        Item* ent = &entries[ii];
         ent->res().key = kptr;
         kptr += ent->res().nkey;
     }
@@ -381,21 +396,23 @@ lcb_STATUS Durset::MCTX_done(const void *cookie_)
     return LCB_SUCCESS;
 }
 
-void Durset::MCTX_fail()
-{
+void Durset::MCTX_fail() {
+#ifdef LCB_TRACING
     if (span) {
         lcbtrace_span_finish(span, LCBTRACE_NOW);
         span = NULL;
     }
+#endif
     delete this;
 }
 
 void lcbdurctx_set_durstore(lcb_MULTICMD_CTX *mctx, int enabled)
 {
-    static_cast< Durset * >(mctx)->is_durstore = enabled;
+    static_cast<Durset*>(mctx)->is_durstore = enabled;
 }
 
-static lcb_U8 get_poll_meth(lcb_INSTANCE *instance, const lcb_durability_opts_t *options)
+static lcb_U8
+get_poll_meth(lcb_t instance, const lcb_durability_opts_t *options)
 {
     /* Need to call this first, so we can actually allocate the appropriate
      * data for this.. */
@@ -409,7 +426,8 @@ static lcb_U8 get_poll_meth(lcb_INSTANCE *instance, const lcb_durability_opts_t 
     if (meth == LCB_DURABILITY_MODE_DEFAULT) {
         meth = LCB_DURABILITY_MODE_CAS;
 
-        if (LCBT_SETTING(instance, fetch_mutation_tokens) && LCBT_SETTING(instance, dur_mutation_tokens)) {
+        if (LCBT_SETTING(instance, fetch_mutation_tokens) &&
+                LCBT_SETTING(instance, dur_mutation_tokens)) {
             for (size_t ii = 0; ii < LCBT_NSERVERS(instance); ii++) {
                 if (instance->get_server(ii)->supports_mutation_tokens()) {
                     meth = LCB_DURABILITY_MODE_SEQNO;
@@ -422,9 +440,14 @@ static lcb_U8 get_poll_meth(lcb_INSTANCE *instance, const lcb_durability_opts_t 
     return meth;
 }
 
-Durset::Durset(lcb_INSTANCE *instance_, const lcb_durability_opts_t *options)
-    : MultiCmdContext(), nremaining(0), waiting(0), refcnt(0), next_state(STATE_OBSPOLL), lasterr(LCB_SUCCESS),
-      is_durstore(false), cookie(NULL), ns_timeout(0), timer(NULL), instance(instance_), span(NULL)
+Durset::Durset(lcb_t instance_, const lcb_durability_opts_t *options)
+    : MultiCmdContext(),
+      nremaining(0), waiting(0), refcnt(0), next_state(STATE_OBSPOLL),
+      lasterr(LCB_SUCCESS), is_durstore(false), cookie(NULL),
+      ns_timeout(0), timer(NULL), instance(instance_)
+#ifdef LCB_TRACING
+    , span(NULL)
+#endif
 {
     const lcb_DURABILITYOPTSv0 *opts_in = &options->v.v0;
 
@@ -449,14 +472,17 @@ Durset::Durset(lcb_INSTANCE *instance_, const lcb_durability_opts_t *options)
     lcbio_pTABLE io = instance->iotable;
     timer = io->timer.create(io->p);
 
-    lasterr = lcb_durability_validate(instance, &opts.persist_to, &opts.replicate_to,
-                                      opts.cap_max ? LCB_DURABILITY_VALIDATE_CAPMAX : 0);
+    lasterr = lcb_durability_validate(instance,
+        &opts.persist_to, &opts.replicate_to,
+        opts.cap_max ? LCB_DURABILITY_VALIDATE_CAPMAX : 0);
 }
 
 LIBCOUCHBASE_API
-lcb_MULTICMD_CTX *lcb_endure3_ctxnew(lcb_INSTANCE *instance, const lcb_durability_opts_t *options, lcb_STATUS *errp)
+lcb_MULTICMD_CTX *
+lcb_endure3_ctxnew(lcb_t instance, const lcb_durability_opts_t *options,
+    lcb_error_t *errp)
 {
-    lcb_STATUS err_s;
+    lcb_error_t err_s;
     if (!errp) {
         errp = &err_s;
     }
@@ -487,13 +513,57 @@ lcb_MULTICMD_CTX *lcb_endure3_ctxnew(lcb_INSTANCE *instance, const lcb_durabilit
     return dset;
 }
 
+LIBCOUCHBASE_API
+lcb_error_t
+lcb_durability_poll(lcb_t instance, const void *cookie,
+    const lcb_durability_opts_t *options, lcb_size_t ncmds,
+    const lcb_durability_cmd_t *const *cmds)
+{
+    lcb_MULTICMD_CTX *mctx;
+    lcb_error_t err;
+
+    if (ncmds == 0) {
+        return LCB_EINVAL;
+    }
+
+    mctx = lcb_endure3_ctxnew(instance, options, &err);
+    if (!mctx) {
+        return err;
+    }
+
+    for (size_t ii = 0; ii < ncmds; ii++) {
+        lcb_CMDENDURE cmd = { 0 };
+        const lcb_DURABILITYCMDv0 *src = &cmds[ii]->v.v0;
+        cmd.key.contig.bytes = src->key;
+        cmd.key.contig.nbytes = src->nkey;
+        cmd._hashkey.contig.bytes = src->hashkey;
+        cmd._hashkey.contig.nbytes = src->nhashkey;
+        cmd.cas = src->cas;
+
+        err = mctx->addcmd(mctx, (lcb_CMDBASE*)&cmd);
+        if (err != LCB_SUCCESS) {
+            mctx->fail(mctx);
+            return err;
+        }
+    }
+
+    lcb_sched_enter(instance);
+    err = mctx->done(mctx, cookie);
+    if (err != LCB_SUCCESS) {
+        lcb_sched_fail(instance);
+        return err;
+    } else {
+        lcb_sched_leave(instance);
+        SYNCMODE_INTERCEPT(instance)
+    }
+}
+
 /**
  * Actually free the resources allocated by the dset (and all its entries).
  * Called by some other functions in libcouchbase
  */
-void lcbdur_destroy(void *dset)
-{
-    delete reinterpret_cast< Durset * >(dset);
+void lcbdur_destroy(void *dset) {
+    delete reinterpret_cast<Durset*>(dset);
 }
 
 Durset::~Durset()
@@ -512,12 +582,12 @@ Durset::~Durset()
 /**
  * All-purpose callback dispatcher.
  */
-static void timer_callback(lcb_socket_t, short, void *arg)
-{
-    reinterpret_cast< Durset * >(arg)->tick();
+static void timer_callback(lcb_socket_t, short, void *arg) {
+    reinterpret_cast<Durset*>(arg)->tick();
 }
 
-void Durset::tick()
+void
+Durset::tick()
 {
     hrtime_t now = gethrtime();
 
@@ -526,41 +596,41 @@ void Durset::tick()
     }
 
     switch (next_state) {
-        case STATE_OBSPOLL:
-        case STATE_INIT:
-            poll();
-            break;
+    case STATE_OBSPOLL:
+    case STATE_INIT:
+        poll();
+        break;
 
-        case STATE_TIMEOUT: {
-            lcb_STATUS err = lasterr ? lasterr : LCB_ETIMEDOUT;
-            ns_timeout = 0;
-            next_state = STATE_IGNORE;
+    case STATE_TIMEOUT: {
+        lcb_error_t err = lasterr ? lasterr : LCB_ETIMEDOUT;
+        ns_timeout = 0;
+        next_state = STATE_IGNORE;
 
-            lcb_log(LOGARGS_T(WARN), "Polling durability timed out!");
+        lcb_log(LOGARGS_T(WARN), "Polling durability timed out!");
 
-            incref();
+        incref();
 
-            for (size_t ii = 0; ii < entries.size(); ii++) {
-                Item *ent = &entries[ii];
-                if (ent->done) {
-                    continue;
-                }
-                if (ent->res().rc == LCB_SUCCESS) {
-                    ent->res().rc = err;
-                }
-                ent->finish();
+        for (size_t ii = 0; ii < entries.size(); ii++) {
+            Item *ent = &entries[ii];
+            if (ent->done) {
+                continue;
             }
-
-            decref();
-            break;
+            if (ent->res().rc == LCB_SUCCESS) {
+                ent->res().rc = err;
+            }
+            ent->finish();
         }
 
-        case STATE_IGNORE:
-            break;
+        decref();
+        break;
+    }
 
-        default:
-            lcb_assert("unexpected state" && 0);
-            break;
+    case STATE_IGNORE:
+        break;
+
+    default:
+        lcb_assert("unexpected state" && 0);
+        break;
     }
 }
 
@@ -568,10 +638,11 @@ void Durset::tick()
  * Schedules us to be notified with the given state within a particular amount
  * of time. This is used both for the timeout and for the interval
  */
-void Durset::switch_state(State state)
+void
+Durset::switch_state(State state)
 {
     uint32_t delay = 0;
-    lcbio_TABLE *io = instance->iotable;
+    lcbio_TABLE* io = instance->iotable;
     hrtime_t now = gethrtime();
 
     if (state == STATE_TIMEOUT) {

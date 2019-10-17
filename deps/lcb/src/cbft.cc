@@ -1,6 +1,5 @@
-/* -*- Mode: C; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2016-2019 Couchbase, Inc.
+ *     Copyright 2016 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -16,6 +15,7 @@
  **/
 
 #include <libcouchbase/couchbase.h>
+#include <libcouchbase/cbft.h>
 #include <jsparse/parser.h>
 #include "internal.h"
 #include "http/http.h"
@@ -27,100 +27,24 @@
 #define LOGID(req) static_cast<const void*>(req)
 #define LOGARGS(req, lvl) req->instance->settings, "n1ql", LCB_LOG_##lvl, __FILE__, __LINE__
 
-LIBCOUCHBASE_API lcb_STATUS lcb_respfts_status(const lcb_RESPFTS *resp)
-{
-    return resp->rc;
-}
-
-LIBCOUCHBASE_API lcb_STATUS lcb_respfts_cookie(const lcb_RESPFTS *resp, void **cookie)
-{
-    *cookie = resp->cookie;
-    return LCB_SUCCESS;
-}
-
-LIBCOUCHBASE_API lcb_STATUS lcb_respfts_row(const lcb_RESPFTS *resp, const char **row, size_t *row_len)
-{
-    *row = resp->row;
-    *row_len = resp->nrow;
-    return LCB_SUCCESS;
-}
-
-LIBCOUCHBASE_API lcb_STATUS lcb_respfts_http_response(const lcb_RESPFTS *resp, const lcb_RESPHTTP **http)
-{
-    *http = resp->htresp;
-    return LCB_SUCCESS;
-}
-
-LIBCOUCHBASE_API lcb_STATUS lcb_respfts_handle(const lcb_RESPFTS *resp, lcb_FTS_HANDLE **handle)
-{
-    *handle = resp->handle;
-    return LCB_SUCCESS;
-}
-
-LIBCOUCHBASE_API int lcb_respfts_is_final(const lcb_RESPFTS *resp)
-{
-    return resp->rflags & LCB_RESP_F_FINAL;
-}
-
-
-LIBCOUCHBASE_API lcb_STATUS lcb_cmdfts_create(lcb_CMDFTS **cmd)
-{
-    *cmd = (lcb_CMDFTS *)calloc(1, sizeof(lcb_CMDFTS));
-    return LCB_SUCCESS;
-}
-
-LIBCOUCHBASE_API lcb_STATUS lcb_cmdfts_destroy(lcb_CMDFTS *cmd)
-{
-    free(cmd);
-    return LCB_SUCCESS;
-}
-
-LIBCOUCHBASE_API lcb_STATUS lcb_cmdfts_timeout(lcb_CMDFTS *cmd, uint32_t timeout)
-{
-    return LCB_SUCCESS;
-}
-
-LIBCOUCHBASE_API lcb_STATUS lcb_cmdfts_parent_span(lcb_CMDFTS *cmd, lcbtrace_SPAN *span)
-{
-    cmd->pspan = span;
-    return LCB_SUCCESS;
-}
-
-LIBCOUCHBASE_API lcb_STATUS lcb_cmdfts_callback(lcb_CMDFTS *cmd, lcb_FTS_CALLBACK callback)
-{
-    cmd->callback = callback;
-    return LCB_SUCCESS;
-}
-
-LIBCOUCHBASE_API lcb_STATUS lcb_cmdfts_query(lcb_CMDFTS *cmd, const char *query, size_t query_len)
-{
-    cmd->query = query;
-    cmd->nquery = query_len;
-    return LCB_SUCCESS;
-}
-
-LIBCOUCHBASE_API lcb_STATUS lcb_cmdfts_handle(lcb_CMDFTS *cmd, lcb_FTS_HANDLE **handle)
-{
-    cmd->handle = handle;
-    return LCB_SUCCESS;
-}
-
-struct lcb_FTS_HANDLE_ : lcb::jsparse::Parser::Actions {
+struct lcb_FTSREQ : lcb::jsparse::Parser::Actions {
     const lcb_RESPHTTP *cur_htresp;
-    lcb_HTTP_HANDLE *htreq;
+    lcb_http_request_t htreq;
     lcb::jsparse::Parser *parser;
     const void *cookie;
-    lcb_FTS_CALLBACK callback;
-    lcb_INSTANCE * instance;
+    lcb_FTSCALLBACK callback;
+    lcb_t instance;
     size_t nrows;
-    lcb_STATUS lasterr;
+    lcb_error_t lasterr;
+#ifdef LCB_TRACING
     lcbtrace_SPAN *span;
+#endif
 
     void invoke_row(lcb_RESPFTS *resp);
     void invoke_last();
 
-    lcb_FTS_HANDLE_(lcb_INSTANCE *, const void *, const lcb_CMDFTS *);
-    ~lcb_FTS_HANDLE_();
+    lcb_FTSREQ(lcb_t, const void *, const lcb_CMDFTS *);
+    ~lcb_FTSREQ();
     void JSPARSE_on_row(const lcb::jsparse::Row& datum) {
         lcb_RESPFTS resp = { 0 };
         resp.row = static_cast<const char*>(datum.row.iov_base);
@@ -137,10 +61,10 @@ struct lcb_FTS_HANDLE_ : lcb::jsparse::Parser::Actions {
 };
 
 static void
-chunk_callback(lcb_INSTANCE *, int, const lcb_RESPBASE *rb)
+chunk_callback(lcb_t, int, const lcb_RESPBASE *rb)
 {
     const lcb_RESPHTTP *rh = (const lcb_RESPHTTP *)rb;
-    lcb_FTS_HANDLE_ *req = static_cast<lcb_FTS_HANDLE_*>(rh->cookie);
+    lcb_FTSREQ *req = static_cast<lcb_FTSREQ*>(rh->cookie);
 
     req->cur_htresp = rh;
     if (rh->rc != LCB_SUCCESS || rh->htstatus != 200) {
@@ -163,11 +87,10 @@ chunk_callback(lcb_INSTANCE *, int, const lcb_RESPBASE *rb)
 }
 
 void
-lcb_FTS_HANDLE_::invoke_row(lcb_RESPFTS *resp)
+lcb_FTSREQ::invoke_row(lcb_RESPFTS *resp)
 {
     resp->cookie = const_cast<void*>(cookie);
     resp->htresp = cur_htresp;
-    resp->handle = this;
 
     if (callback) {
         callback(instance, -4, resp);
@@ -175,7 +98,7 @@ lcb_FTS_HANDLE_::invoke_row(lcb_RESPFTS *resp)
 }
 
 void
-lcb_FTS_HANDLE_::invoke_last()
+lcb_FTSREQ::invoke_last()
 {
     lcb_RESPFTS resp = { 0 };
     resp.rflags |= LCB_RESP_F_FINAL;
@@ -191,26 +114,26 @@ lcb_FTS_HANDLE_::invoke_last()
     callback = NULL;
 }
 
-lcb_FTS_HANDLE_::lcb_FTS_HANDLE_(lcb_INSTANCE * instance_, const void *cookie_, const lcb_CMDFTS *cmd)
+lcb_FTSREQ::lcb_FTSREQ(lcb_t instance_, const void *cookie_, const lcb_CMDFTS *cmd)
 : lcb::jsparse::Parser::Actions(),
   cur_htresp(NULL), htreq(NULL),
   parser(new lcb::jsparse::Parser(lcb::jsparse::Parser::MODE_FTS, this)),
   cookie(cookie_), callback(cmd->callback), instance(instance_), nrows(0),
-  lasterr(LCB_SUCCESS), span(NULL)
+  lasterr(LCB_SUCCESS)
+#ifdef LCB_TRACING
+    , span(NULL)
+#endif
 {
+    lcb_CMDHTTP htcmd = { 0 };
+    htcmd.type = LCB_HTTP_TYPE_FTS;
+    htcmd.method = LCB_HTTP_METHOD_POST;
+    htcmd.reqhandle = &htreq;
+    htcmd.content_type = "application/json";
+    htcmd.cmdflags |= LCB_CMDHTTP_F_STREAM;
     if (!callback) {
         lasterr = LCB_EINVAL;
         return;
     }
-
-    std::string content_type("application/json");
-
-    lcb_CMDHTTP *htcmd;
-    lcb_cmdhttp_create(&htcmd, LCB_HTTP_TYPE_FTS);
-    lcb_cmdhttp_method(htcmd, LCB_HTTP_METHOD_POST);
-    lcb_cmdhttp_handle(htcmd, &htreq);
-    lcb_cmdhttp_content_type(htcmd, content_type.c_str(), content_type.size());
-    lcb_cmdhttp_streaming(htcmd, true);
 
     Json::Value root;
     Json::Reader rr;
@@ -228,7 +151,7 @@ lcb_FTS_HANDLE_::lcb_FTS_HANDLE_(lcb_INSTANCE * instance_, const void *cookie_, 
 
     std::string url;
     url.append("api/index/").append(j_ixname.asCString()).append("/query");
-    lcb_cmdhttp_path(htcmd, url.c_str(), url.size());
+    LCB_CMD_SET_KEY(&htcmd, url.c_str(), url.size());
 
     // Making a copy here to ensure that we don't accidentally create a new
     // 'ctl' field.
@@ -236,22 +159,24 @@ lcb_FTS_HANDLE_::lcb_FTS_HANDLE_(lcb_INSTANCE * instance_, const void *cookie_, 
     if (ctl.isObject()) {
         const Json::Value& tmo = ctl["timeout"];
         if (tmo.isNumeric()) {
-            lcb_cmdhttp_timeout(htcmd, tmo.asLargestUInt());
+            htcmd.cmdflags |= LCB_CMDHTTP_F_CASTMO;
+            htcmd.cas = tmo.asLargestUInt();
         }
     } else {
         root["ctl"]["timeout"] = LCBT_SETTING(instance, n1ql_timeout) / 1000;
     }
 
     std::string qbody(Json::FastWriter().write(root));
-    lcb_cmdhttp_body(htcmd, qbody.c_str(), qbody.size());
+    htcmd.body = qbody.c_str();
+    htcmd.nbody = qbody.size();
 
-    lasterr = lcb_http(instance, this, htcmd);
-    lcb_cmdhttp_destroy(htcmd);
+    lasterr = lcb_http3(instance, this, &htcmd);
     if (lasterr == LCB_SUCCESS) {
         htreq->set_callback(chunk_callback);
         if (cmd->handle) {
-            *cmd->handle = reinterpret_cast<lcb_FTS_HANDLE_*>(this);
+            *cmd->handle = reinterpret_cast<lcb_FTSREQ*>(this);
         }
+#ifdef LCB_TRACING
         if (instance->settings->tracer) {
             char id[20] = {0};
             snprintf(id, sizeof(id), "%p", (void *)this);
@@ -259,15 +184,17 @@ lcb_FTS_HANDLE_::lcb_FTS_HANDLE_(lcb_INSTANCE * instance_, const void *cookie_, 
             lcbtrace_span_add_tag_str(span, LCBTRACE_TAG_OPERATION_ID, id);
             lcbtrace_span_add_system_tags(span, instance->settings, LCBTRACE_TAG_SERVICE_SEARCH);
         }
+#endif
     }
 }
 
-lcb_FTS_HANDLE_::~lcb_FTS_HANDLE_()
+lcb_FTSREQ::~lcb_FTSREQ()
 {
     if (htreq != NULL) {
-        lcb_http_cancel(instance, htreq);
+        lcb_cancel_http_request(instance, htreq);
         htreq = NULL;
     }
+#ifdef LCB_TRACING
     if (span) {
         if (htreq) {
             lcbio_CTX *ctx = htreq->ioctx;
@@ -286,25 +213,41 @@ lcb_FTS_HANDLE_::~lcb_FTS_HANDLE_()
         lcbtrace_span_finish(span, LCBTRACE_NOW);
         span = NULL;
     }
+#endif
     if (parser) {
         delete parser;
         parser = NULL;
     }
 }
 
-LIBCOUCHBASE_API lcb_STATUS lcb_fts(lcb_INSTANCE *instance, void *cookie, const lcb_CMDFTS *cmd)
+LIBCOUCHBASE_API
+lcb_error_t
+lcb_fts_query(lcb_t instance, const void *cookie, const lcb_CMDFTS *cmd)
 {
-    lcb_FTS_HANDLE_ *req = new lcb_FTS_HANDLE_(instance, cookie, cmd);
+    lcb_FTSREQ *req = new lcb_FTSREQ(instance, cookie, cmd);
     if (req->lasterr) {
-        lcb_STATUS rc = req->lasterr;
+        lcb_error_t rc = req->lasterr;
         delete req;
         return rc;
     }
     return LCB_SUCCESS;
 }
 
-LIBCOUCHBASE_API lcb_STATUS lcb_fts_cancel(lcb_INSTANCE *, lcb_FTS_HANDLE *handle)
+LIBCOUCHBASE_API
+void
+lcb_fts_cancel(lcb_t, lcb_FTSHANDLE handle)
 {
     handle->callback = NULL;
-    return LCB_SUCCESS;
 }
+
+#ifdef LCB_TRACING
+
+LIBCOUCHBASE_API
+void lcb_fts_set_parent_span(lcb_t, lcb_FTSHANDLE handle, lcbtrace_SPAN *span)
+{
+    if (handle) {
+        lcbtrace_span_set_parent(handle->span, span);
+    }
+}
+
+#endif

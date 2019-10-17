@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2013-2019 Couchbase, Inc.
+ *     Copyright 2013 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -56,63 +56,74 @@ const char default_plugins_string[] = "select;iocp;libuv";
 #include <unistd.h> /* usleep */
 const char default_plugins_string[] = "select"
 #if defined(HAVE_LIBEV3) || defined(HAVE_LIBEV4)
-                                      ";libev"
+";libev"
 #endif
 #if defined(HAVE_LIBEVENT) || defined(HAVE_LIBEVENT2)
-                                      ";libevent"
+";libevent"
 #endif
 #ifdef HAVE_LIBUV
-                                      ";libuv"
+";libuv"
 #endif
-    ;
+;
 #define PATHSEP "/"
 #endif
 
-typedef std::vector< std::string > strlist;
+typedef std::vector<std::string> strlist;
 
 class TestConfiguration
 {
 
-  public:
-    TestConfiguration()
-        : opt_debugger("debugger"), opt_plugins("plugins"), opt_jobs("jobs"), opt_srcdir("srcdir"),
-          opt_bindir("testdir"), opt_interactive("interactive"), opt_verbose("verbose"), opt_cycles("repeat"),
-          opt_libdir("libdir"), opt_bins("tests"), opt_realcluster("cluster"), opt_gtest_filter("gtest_filter"),
-          opt_gtest_break_on_failure("gtest_break_on_failure"), opt_gtest_catch_exceptions("gtest_catch_exceptions")
+public:
+    TestConfiguration() :
+        opt_debugger("debugger"), opt_plugins("plugins"), opt_jobs("jobs"),
+        opt_srcdir("srcdir"), opt_bindir("testdir"), opt_interactive("interactive"),
+        opt_verbose("verbose"), opt_cycles("repeat"), opt_libdir("libdir"),
+        opt_bins("tests"), opt_realcluster("cluster"),
+        opt_gtest_filter("gtest_filter"),
+        opt_gtest_break_on_failure("gtest_break_on_failure"),
+        opt_gtest_catch_exceptions("gtest_catch_exceptions")
     {
-        opt_debugger.abbrev('d').description("Verbatim string to prepend to the binary command line");
+        opt_debugger.abbrev('d')
+                .description("Verbatim string to prepend to the binary command line");
 
         opt_plugins.abbrev('p')
-            .description("semicolon-delimited list of plugins to test")
-            .setDefault(default_plugins_string);
-        opt_jobs.abbrev('j').description("Execute this many processes concurrently").setDefault(1);
+                .description("semicolon-delimited list of plugins to test")
+                .setDefault(default_plugins_string);
+        opt_jobs.abbrev('j')
+                .description("Execute this many processes concurrently")
+                .setDefault(1);
 
         opt_srcdir.abbrev('S')
-            .description("root directory of source tree (for locating mock)")
-            .setDefault(getEffectiveSrcroot());
+                .description("root directory of source tree (for locating mock)")
+                .setDefault(getEffectiveSrcroot());
 
         opt_bindir.abbrev('T')
-            .description("Directory where test binaries are located")
-            .setDefault(getEffectiveTestdir());
+                .description("Directory where test binaries are located")
+                .setDefault(getEffectiveTestdir());
 
-        opt_interactive.abbrev('I').description(
-            "Set this to true when using an interactive debugger. This unblocks stdin");
+        opt_interactive.abbrev('I')
+                .description("Set this to true when using an interactive debugger. This unblocks stdin");
 
-        opt_bins.abbrev('B').description("semicolon delimited list of tests to run").setDefault(DEFAULT_TEST_NAMES);
+        opt_bins.abbrev('B')
+                .description("semicolon delimited list of tests to run")
+                .setDefault(DEFAULT_TEST_NAMES);
 
-        opt_cycles.abbrev('n').description("Number of times to run the tests").setDefault(1);
+        opt_cycles.abbrev('n')
+                .description("Number of times to run the tests")
+                .setDefault(1);
 
-        opt_libdir.abbrev('L').description("Directory where plugins are located. Useful on OS X");
+        opt_libdir.abbrev('L')
+                .description("Directory where plugins are located. Useful on OS X");
 
-        opt_realcluster.abbrev('C').description("Path to real cluster");
+        opt_realcluster.abbrev('C')
+                .description("Path to real cluster");
 
         opt_verbose.abbrev('v');
     }
 
     ~TestConfiguration() {}
 
-    static void splitSemicolonString(const std::string &s, strlist &l)
-    {
+    static void splitSemicolonString(const std::string &s, strlist &l) {
         std::string cur;
 
         for (const char *c = s.c_str(); *c; c++) {
@@ -129,8 +140,7 @@ class TestConfiguration
         }
     }
 
-    bool parseOptions(int argc, char **argv)
-    {
+    bool parseOptions(int argc, char **argv) {
         std::stringstream ss;
         cliopts::Parser parser("check-all");
 
@@ -153,25 +163,22 @@ class TestConfiguration
             return false;
         }
 
-        using std::string;
         using std::vector;
+        using std::string;
 
-        const vector< string > &args = parser.getRestArgs();
+        const vector<string>& args = parser.getRestArgs();
         for (size_t ii = 0; ii < args.size(); ii++) {
             ss << args[ii] << " ";
         }
 
         if (!opt_gtest_filter.result().empty()) {
-            ss << " "
-               << "--gtest_filter=" << opt_gtest_filter.result();
+            ss << " " << "--gtest_filter=" << opt_gtest_filter.result();
         }
         if (opt_gtest_break_on_failure.passed()) {
-            ss << " "
-               << "--gtest_break_on_failure=1";
+            ss << " " << "--gtest_break_on_failure=1";
         }
         if (opt_gtest_catch_exceptions.passed()) {
-            ss << " "
-               << "--gtest_catch_exceptions=1";
+            ss << " " << "--gtest_catch_exceptions=1";
         }
 
         binOptions = ss.str();
@@ -192,6 +199,7 @@ class TestConfiguration
         maxCycles = opt_cycles.result();
         setJobsFromEnvironment();
 
+
         // Plugin list:
         splitSemicolonString(opt_plugins.result(), plugins);
 
@@ -206,8 +214,7 @@ class TestConfiguration
     }
 
     // Sets up the command line, appending any debugger info and paths
-    std::string setupCommandline(std::string &name)
-    {
+    std::string setupCommandline(std::string &name) {
         std::stringstream ss;
         std::string ret;
 
@@ -224,6 +231,7 @@ class TestConfiguration
         return ss.str();
     }
 
+
     // Options passed to the binary itself
     std::string binOptions;
     std::string srcroot;
@@ -239,12 +247,11 @@ class TestConfiguration
     bool isInteractive;
     int maxJobs;
     int maxCycles;
-    int getVerbosityLevel()
-    {
+    int getVerbosityLevel() {
         return opt_verbose.numSpecified();
     }
 
-  private:
+private:
     cliopts::StringOption opt_debugger;
     cliopts::StringOption opt_plugins;
     cliopts::UIntOption opt_jobs;
@@ -260,8 +267,7 @@ class TestConfiguration
     cliopts::BoolOption opt_gtest_break_on_failure;
     cliopts::BoolOption opt_gtest_catch_exceptions;
 
-    void setJobsFromEnvironment()
-    {
+    void setJobsFromEnvironment() {
         char *tmp = getenv("MAKEFLAGS");
 
         if (tmp == NULL || *tmp == '\0') {
@@ -276,8 +282,7 @@ class TestConfiguration
         }
     }
 
-    std::string getEffectiveSrcroot()
-    {
+    std::string getEffectiveSrcroot() {
         const char *tmp = getenv(LCB_SRCROOT_ENV_VAR);
         if (tmp && *tmp) {
             return tmp;
@@ -286,8 +291,7 @@ class TestConfiguration
         return getDefaultSrcroot();
     }
 
-    std::string getEffectiveTestdir()
-    {
+    std::string getEffectiveTestdir() {
         const char *tmp = getenv("outdir");
         if (tmp && *tmp) {
             return tmp;
@@ -297,21 +301,18 @@ class TestConfiguration
 
 #ifndef _WIN32
     // Evaluated *before*
-    std::string getDefaultSrcroot()
-    {
+    std::string getDefaultSrcroot() {
         return ".";
     }
 
-    std::string getDefaultTestdir()
-    {
+    std::string getDefaultTestdir() {
         return (srcroot + PATHSEP) + "tests";
     }
 
 #else
-    std::string getSelfDirname()
-    {
+    std::string getSelfDirname() {
         DWORD result;
-        char pathbuf[4096] = {0};
+        char pathbuf[4096] = { 0 };
         result = GetModuleFileName(NULL, pathbuf, sizeof(pathbuf));
         assert(result > 0);
         assert(result < sizeof(pathbuf));
@@ -325,8 +326,7 @@ class TestConfiguration
         return pathbuf;
     }
     // For windows, we reside in the same directory as the binaries
-    std::string getDefaultSrcroot()
-    {
+    std::string getDefaultSrcroot() {
         std::string dir = getSelfDirname();
         std::stringstream ss;
         ss << dir;
@@ -351,12 +351,12 @@ class TestConfiguration
         return ss.str();
     }
 
-    std::string getDefaultTestdir()
-    {
+    std::string getDefaultTestdir() {
         return getSelfDirname();
     }
 #endif
 };
+
 
 static void setPluginEnvironment(std::string &name)
 {
@@ -371,7 +371,8 @@ static void setPluginEnvironment(std::string &name)
     struct lcb_cntl_iops_info_st ioi;
     memset(&ioi, 0, sizeof(ioi));
 
-    lcb_STATUS err = lcb_cntl(NULL, LCB_CNTL_GET, LCB_CNTL_IOPS_DEFAULT_TYPES, &ioi);
+    lcb_error_t err = lcb_cntl(NULL, LCB_CNTL_GET, LCB_CNTL_IOPS_DEFAULT_TYPES,
+                               &ioi);
     if (err != LCB_SUCCESS) {
         fprintf(stderr, "LCB Error 0x%x\n", err);
     } else {
@@ -416,8 +417,8 @@ struct Process {
     bool exitedOk;
     bool verbose;
 
-    Process(std::string &plugin, std::string &name, std::string &cmd, TestConfiguration &config)
-    {
+    Process(std::string &plugin, std::string &name, std::string &cmd,
+            TestConfiguration &config) {
         this->pluginName = plugin;
         this->testName = name;
         this->commandline = cmd;
@@ -426,15 +427,13 @@ struct Process {
         this->logfileName = "check-all-" + pluginName + "-" + testName + ".log";
     }
 
-    void writeLog(const char *msg)
-    {
+    void writeLog(const char *msg) {
         std::ofstream out(logfileName.c_str(), std::ios::app);
         out << msg << std::endl;
         out.close();
     }
 
-    void setupPointers()
-    {
+    void setupPointers() {
         memset(&proc_, 0, sizeof(proc_));
 
         proc_.name = commandline.c_str();
@@ -447,11 +446,13 @@ struct Process {
 
 class TestScheduler
 {
-  public:
-    TestScheduler(unsigned int lim) : limit(lim) {}
+public:
+    TestScheduler(unsigned int lim) : limit(lim) {
 
-    typedef std::list< Process * > proclist;
-    std::vector< Process > _all;
+    }
+
+    typedef std::list<Process *> proclist;
+    std::vector<Process> _all;
 
     proclist executing;
     proclist scheduled;
@@ -459,13 +460,12 @@ class TestScheduler
 
     unsigned int limit;
 
-    void schedule(Process proc)
-    {
+    void schedule(Process proc) {
         _all.push_back(proc);
     }
 
-    bool runAll()
-    {
+
+    bool runAll() {
         proclist::iterator iter;
         scheduleAll();
 
@@ -485,7 +485,9 @@ class TestScheduler
                 if (rv == 0) {
                     char msg[2048];
                     cur->exitedOk = cur->proc_.status == 0;
-                    snprintf(msg, 2048, "REAP [%s] '%s' .. %s", cur->pluginName.c_str(), cur->commandline.c_str(),
+                    snprintf(msg, 2048, "REAP [%s] '%s' .. %s",
+                             cur->pluginName.c_str(),
+                             cur->commandline.c_str(),
                              cur->exitedOk ? "OK" : "FAIL");
                     cur->writeLog(msg);
                     fprintf(stderr, "%s\n", msg);
@@ -511,26 +513,28 @@ class TestScheduler
         return true;
     }
 
-  private:
-    void scheduleAll()
-    {
+private:
+    void scheduleAll() {
         for (unsigned int ii = 0; ii < _all.size(); ii++) {
             Process *p = &_all[ii];
             scheduled.push_back(p);
         }
     }
-    void invokeScheduled(Process *proc)
-    {
+    void invokeScheduled(Process *proc) {
         proc->setupPointers();
         setPluginEnvironment(proc->pluginName);
         char msg[2048];
-        snprintf(msg, 2048, "START [%s] '%s'", proc->pluginName.c_str(), proc->commandline.c_str());
+        snprintf(msg, 2048, "START [%s] '%s'",
+                 proc->pluginName.c_str(),
+                 proc->commandline.c_str());
         proc->writeLog(msg);
         fprintf(stderr, "%s\n", msg);
 
         int rv = create_process(&proc->proc_);
         if (rv < 0) {
-            snprintf(msg, 2048, "FAIL couldn't invoke [%s] '%s'", proc->pluginName.c_str(), proc->commandline.c_str());
+            snprintf(msg, 2048, "FAIL couldn't invoke [%s] '%s'",
+                     proc->pluginName.c_str(),
+                     proc->commandline.c_str());
             proc->writeLog(msg);
             fprintf(stderr, "%s\n", msg);
             proc->exitedOk = false;
@@ -540,32 +544,32 @@ class TestScheduler
             executing.push_back(proc);
         }
     }
+
 };
 
 static bool runSingleCycle(TestConfiguration &config)
 {
     TestScheduler scheduler(config.maxJobs);
     setLinkerEnvironment(config.libDir);
-    for (strlist::iterator iter = config.plugins.begin(); iter != config.plugins.end(); iter++) {
+    for (strlist::iterator iter = config.plugins.begin();
+            iter != config.plugins.end();
+            iter++) {
 
         fprintf(stderr, "Testing with plugin '%s'\n", iter->c_str());
-#ifdef __linux__
-        {
-            char buf[1024] = {0};
-            sprintf(buf, "ldd %s/libcouchbase_%s.so", config.libDir.c_str(), iter->c_str());
-            fprintf(stderr, "%s\n", buf);
-            system(buf);
-        }
-#endif
-        for (strlist::iterator iterbins = config.testnames.begin(); iterbins != config.testnames.end(); iterbins++) {
+
+        for (strlist::iterator iterbins = config.testnames.begin();
+                iterbins != config.testnames.end();
+                iterbins++) {
 
             std::string cmdline = config.setupCommandline(*iterbins);
             fprintf(stderr, "Command line '%s'\n", cmdline.c_str());
             scheduler.schedule(Process(*iter, *iterbins, cmdline, config));
         }
+
     }
 
     return scheduler.runAll();
+
 }
 
 int main(int argc, char **argv)
@@ -586,7 +590,7 @@ int main(int argc, char **argv)
     fprintf(stderr, "export LCB_VERBOSE_TESTS=1\n");
     setenv("LCB_VERBOSE_TESTS", "1", 1);
 
-    char loglevel_s[4096] = {0};
+    char loglevel_s[4096] = { 0 };
     if (config.getVerbosityLevel() > 0) {
         sprintf(loglevel_s, "%d", config.getVerbosityLevel());
         setenv("LCB_LOGLEVEL", loglevel_s, 0);

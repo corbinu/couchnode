@@ -1,6 +1,6 @@
 /* -*- Mode: C; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2013-2019 Couchbase, Inc.
+ *     Copyright 2013 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -21,13 +21,13 @@ using namespace lcb;
 using std::queue;
 using std::vector;
 
-Pool::Pool(const lcb_create_st &options, size_t nitems) : initial_size(0)
+Pool::Pool(const lcb_create_st& options, size_t nitems) : initial_size(0)
 {
     pthread_mutex_init(&mutex, NULL);
     pthread_cond_init(&cond, NULL);
     for (size_t ii = 0; ii < nitems; ii++) {
-        lcb_INSTANCE *cur;
-        lcb_STATUS err = lcb_create(&cur, &options);
+        lcb_t cur;
+        lcb_error_t err = lcb_create(&cur, &options);
         if (err != LCB_SUCCESS) {
             throw err;
         }
@@ -38,11 +38,12 @@ Pool::Pool(const lcb_create_st &options, size_t nitems) : initial_size(0)
     }
 }
 
-lcb_STATUS Pool::connect()
+lcb_error_t
+Pool::connect()
 {
-    vector< lcb_INSTANCE * >::const_iterator ii = all_instances.begin();
-    for (; ii != all_instances.end(); ii++) {
-        lcb_STATUS err;
+    vector<lcb_t>::const_iterator ii = all_instances.begin();
+    for (;  ii != all_instances.end(); ii++) {
+        lcb_error_t err;
         initialize(*ii);
         if ((err = lcb_connect(*ii)) != LCB_SUCCESS) {
             return err;
@@ -61,7 +62,7 @@ Pool::~Pool()
     while (instances.size() < initial_size) {
         pthread_cond_wait(&cond, &mutex);
     }
-    vector< lcb_INSTANCE * >::const_iterator ii = all_instances.begin();
+    vector<lcb_t>::const_iterator ii = all_instances.begin();
     for (; ii != all_instances.end(); ii++) {
         lcb_destroy(*ii);
     }
@@ -70,9 +71,10 @@ Pool::~Pool()
     pthread_cond_destroy(&cond);
 }
 
-lcb_INSTANCE *Pool::pop()
+lcb_t
+Pool::pop()
 {
-    lcb_INSTANCE *ret = NULL;
+    lcb_t ret = NULL;
 
     // Need to lock the mutex to the pool structure itself
     pthread_mutex_lock(&mutex);
@@ -90,7 +92,8 @@ lcb_INSTANCE *Pool::pop()
     return ret;
 }
 
-void Pool::push(lcb_INSTANCE *instance)
+void
+Pool::push(lcb_t instance)
 {
     pthread_mutex_lock(&mutex);
     instances.push(instance);

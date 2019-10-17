@@ -1,6 +1,5 @@
-/* -*- Mode: C; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2015-2019 Couchbase, Inc.
+ *     Copyright 2015 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -16,7 +15,8 @@
  */
 #include "internal.h"
 
-lcb_STATUS lcb_observe_seqno3(lcb_INSTANCE *instance, const void *cookie, const lcb_CMDOBSEQNO *cmd)
+lcb_error_t
+lcb_observe_seqno3(lcb_t instance, const void *cookie, const lcb_CMDOBSEQNO *cmd)
 {
     mc_PACKET *pkt;
     protocol_binary_request_header hdr;
@@ -54,10 +54,11 @@ lcb_STATUS lcb_observe_seqno3(lcb_INSTANCE *instance, const void *cookie, const 
     return LCB_SUCCESS;
 }
 
-const lcb_MUTATION_TOKEN *lcb_get_mutation_token(lcb_INSTANCE *instance, const lcb_KEYBUF *kb, lcb_STATUS *errp)
+const lcb_MUTATION_TOKEN *
+lcb_get_mutation_token(lcb_t instance, const lcb_KEYBUF *kb, lcb_error_t *errp)
 {
     int vbix, srvix;
-    lcb_STATUS err_s;
+    lcb_error_t err_s;
     const lcb_MUTATION_TOKEN *existing;
 
     if (!errp) {
@@ -82,7 +83,7 @@ const lcb_MUTATION_TOKEN *lcb_get_mutation_token(lcb_INSTANCE *instance, const l
         return NULL;
     }
 
-    mcreq_map_key(&instance->cmdq, kb, 0, &vbix, &srvix);
+    mcreq_map_key(&instance->cmdq, kb, kb, 0, &vbix, &srvix);
     existing = instance->dcpinfo + vbix;
     if (existing->uuid_ == 0 && existing->seqno_ == 0) {
         *errp = LCB_DURABILITY_NO_MUTATION_TOKENS;

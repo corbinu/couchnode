@@ -1,45 +1,26 @@
-/* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
-/*
- *     Copyright 2011-2019 Couchbase, Inc.
- *
- *   Licensed under the Apache License, Version 2.0 (the "License");
- *   you may not use this file except in compliance with the License.
- *   You may obtain a copy of the License at
- *
- *       http://www.apache.org/licenses/LICENSE-2.0
- *
- *   Unless required by applicable law or agreed to in writing, software
- *   distributed under the License is distributed on an "AS IS" BASIS,
- *   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *   See the License for the specific language governing permissions and
- *   limitations under the License.
- */
-
 #include <gtest/gtest.h>
 #include "connspec.h"
 using namespace lcb;
 
-static size_t countHosts(const Connspec *spec)
-{
+static size_t countHosts(const Connspec *spec) {
     return spec->hosts().size();
 }
 
 class ConnstrTest : public ::testing::Test
 {
-  protected:
+protected:
     Connspec params;
     const char *errmsg;
-    void reinit()
-    {
+    void reinit() {
         params = Connspec();
     }
-    void SetUp()
-    {
+    void SetUp() {
         params = Connspec();
     }
 };
 
-const Spechost *findHost(const Connspec &params, const char *srch)
+const Spechost*
+findHost(const Connspec& params, const char* srch)
 {
     for (size_t ii = 0; ii < params.hosts().size(); ++ii) {
         const Spechost *cur = &params.hosts()[ii];
@@ -49,7 +30,8 @@ const Spechost *findHost(const Connspec &params, const char *srch)
     }
     return NULL;
 }
-const Spechost *findHost(const Connspec *params, const char *srch)
+const Spechost*
+findHost(const Connspec* params, const char *srch)
 {
     return findHost(*params, srch);
 }
@@ -59,7 +41,7 @@ struct OptionPair {
     std::string value;
 };
 
-bool findOption(const Connspec &params, const char *srch, OptionPair &op)
+bool findOption(const Connspec& params, const char *srch, OptionPair& op)
 {
     int iter = 0;
     Connspec::Options::const_iterator ii = params.options().begin();
@@ -73,19 +55,20 @@ bool findOption(const Connspec &params, const char *srch, OptionPair &op)
     return false;
 }
 
-bool findOption(const Connspec *params, const char *srch, OptionPair &op)
+bool findOption(const Connspec* params, const char *srch, OptionPair& op)
 {
     return findOption(*params, srch, op);
 }
 
-size_t countHosts(const Connspec &params)
+size_t
+countHosts(const Connspec &params)
 {
     return params.hosts().size();
 }
 
 TEST_F(ConnstrTest, testParseBasic)
 {
-    lcb_STATUS err;
+    lcb_error_t err;
     err = params.parse("couchbase://1.2.3.4", &errmsg);
     ASSERT_EQ(LCB_SUCCESS, err);
 
@@ -125,11 +108,12 @@ TEST_F(ConnstrTest, testParseBasic)
     ASSERT_FALSE(tmphost == NULL);
     ASSERT_EQ(999, tmphost->port);
     ASSERT_TRUE(tmphost->isHTTP());
+
 }
 
 TEST_F(ConnstrTest, testParseHosts)
 {
-    lcb_STATUS err;
+    lcb_error_t err;
     err = params.parse("couchbase://foo.com,bar.com,baz.com", &errmsg);
     ASSERT_EQ(3, countHosts(&params));
     ASSERT_FALSE(NULL == findHost(&params, "foo.com"));
@@ -172,7 +156,7 @@ TEST_F(ConnstrTest, testParseHosts)
     ASSERT_EQ(4444, dh->port);
     ASSERT_TRUE(dh->isMCD());
 
-    // Parse multiple hosts with ports
+    //Parse multiple hosts with ports
     reinit();
     err = params.parse("couchbase://foo.com:4444=mcd,bar.com:5555=mcd", &errmsg);
     ASSERT_EQ(LCB_SUCCESS, err);
@@ -223,7 +207,7 @@ TEST_F(ConnstrTest, testParseHosts)
 
 TEST_F(ConnstrTest, testParseBucket)
 {
-    lcb_STATUS err;
+    lcb_error_t err;
     err = params.parse("couchbase://foo.com/user", &errmsg);
     ASSERT_EQ(LCB_SUCCESS, err);
     ASSERT_EQ("user", params.bucket()) << "Basic bucket parse";
@@ -251,7 +235,7 @@ TEST_F(ConnstrTest, testParseBucket)
 
 TEST_F(ConnstrTest, testOptionsPassthrough)
 {
-    lcb_STATUS err;
+    lcb_error_t err;
     err = params.parse("couchbase://?foo=bar", &errmsg);
     ASSERT_EQ(LCB_SUCCESS, err) << "Options only";
     ASSERT_FALSE(params.options().empty());
@@ -270,6 +254,7 @@ TEST_F(ConnstrTest, testOptionsPassthrough)
     reinit();
     err = params.parse("couchbase://?foo", &errmsg);
     ASSERT_NE(LCB_SUCCESS, err) << "Option without value";
+
 
     // Multiple options
     reinit();
@@ -302,7 +287,7 @@ TEST_F(ConnstrTest, testOptionsPassthrough)
 
 TEST_F(ConnstrTest, testRecognizedOptions)
 {
-    lcb_STATUS err;
+    lcb_error_t err;
     err = params.parse("couchbases://", &errmsg);
     ASSERT_EQ(LCB_SUCCESS, err);
     ASSERT_EQ(LCB_SSL_ENABLED, params.sslopts());
@@ -315,7 +300,7 @@ TEST_F(ConnstrTest, testRecognizedOptions)
     reinit();
     err = params.parse("couchbases://?ssl=no_verify", &errmsg);
     ASSERT_EQ(LCB_SUCCESS, err);
-    ASSERT_EQ(LCB_SSL_ENABLED | LCB_SSL_NOVERIFY, params.sslopts());
+    ASSERT_EQ(LCB_SSL_ENABLED|LCB_SSL_NOVERIFY, params.sslopts());
 
     reinit();
     err = params.parse("couchbases://?ssl=off", &errmsg);
@@ -330,11 +315,12 @@ TEST_F(ConnstrTest, testRecognizedOptions)
     reinit();
     err = params.parse("couchbase://?console_log_level=gah", &errmsg);
     ASSERT_NE(LCB_SUCCESS, err);
+
 }
 
 TEST_F(ConnstrTest, testTransportOptions)
 {
-    lcb_STATUS err;
+    lcb_error_t err;
     err = params.parse("couchbase://", &errmsg);
     ASSERT_EQ(LCB_SUCCESS, err);
     ASSERT_FALSE(params.is_bs_udef());
@@ -364,7 +350,7 @@ TEST_F(ConnstrTest, testTransportOptions)
 
 TEST_F(ConnstrTest, testCompatConversion)
 {
-    lcb_STATUS err;
+    lcb_error_t err;
     struct lcb_create_st cropts;
     memset(&cropts, 0, sizeof cropts);
     cropts.version = 0;
@@ -409,19 +395,21 @@ TEST_F(ConnstrTest, testCertificateWithoutSSL)
 {
     // Ensure we get an invalid input error for certificate paths without
     // couchbases://
-    lcb_STATUS err;
-    err = params.parse("couchbase://1.2.3.4/default?certpath=/foo/bar/baz", &errmsg);
+    lcb_error_t err;
+    err = params.parse(
+        "couchbase://1.2.3.4/default?certpath=/foo/bar/baz", &errmsg);
     ASSERT_NE(LCB_SUCCESS, err);
 
     reinit();
-    err = params.parse("couchbases://1.2.3.4/default?certpath=/foo/bar/baz", &errmsg);
+    err = params.parse(
+        "couchbases://1.2.3.4/default?certpath=/foo/bar/baz", &errmsg);
     ASSERT_EQ(LCB_SUCCESS, err);
 }
 
 TEST_F(ConnstrTest, testDnsSrvExplicit)
 {
     // Test various things relating to DNS SRV
-    lcb_STATUS err;
+    lcb_error_t err;
     err = params.parse("couchbase+dnssrv://1.1.1.1", &errmsg);
     EXPECT_EQ(LCB_SUCCESS, err);
     EXPECT_TRUE(params.can_dnssrv());

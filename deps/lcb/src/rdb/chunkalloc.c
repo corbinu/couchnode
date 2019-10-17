@@ -1,6 +1,6 @@
 /* -*- Mode: C; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2014-2019 Couchbase, Inc.
+ *     Copyright 2014 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -37,7 +37,8 @@ typedef struct {
     unsigned max_chunks;
 } my_CHUNKALLOC;
 
-static void alloc_decref(rdb_ALLOCATOR *abase)
+static void
+alloc_decref(rdb_ALLOCATOR *abase)
 {
     lcb_list_t *llcur, *llnext;
     my_CHUNKALLOC *alloc = (my_CHUNKALLOC *)abase;
@@ -45,8 +46,7 @@ static void alloc_decref(rdb_ALLOCATOR *abase)
         return;
     }
 
-    LCB_LIST_SAFE_FOR(llcur, llnext, (lcb_list_t *)&alloc->chunks)
-    {
+    LCB_LIST_SAFE_FOR(llcur, llnext, (lcb_list_t *)&alloc->chunks) {
         rdb_ROPESEG *seg = LCB_LIST_ITEM(llcur, rdb_ROPESEG, llnode);
         free(seg->root);
         free(seg);
@@ -54,10 +54,12 @@ static void alloc_decref(rdb_ALLOCATOR *abase)
     free(alloc);
 }
 
-static void release_chunk(rdb_ALLOCATOR *abase, rdb_ROPESEG *seg)
+static void
+release_chunk(rdb_ALLOCATOR *abase, rdb_ROPESEG *seg)
 {
     my_CHUNKALLOC *alloc = (my_CHUNKALLOC *)abase;
-    if (seg->nalloc != alloc->chunksize || LCB_CLIST_SIZE(&alloc->chunks) > alloc->max_chunks) {
+    if (seg->nalloc != alloc->chunksize ||
+            LCB_CLIST_SIZE(&alloc->chunks) > alloc->max_chunks) {
         free(seg->root);
         free(seg);
     } else {
@@ -65,7 +67,8 @@ static void release_chunk(rdb_ALLOCATOR *abase, rdb_ROPESEG *seg)
     }
 }
 
-static rdb_ROPESEG *standalone_alloc(rdb_ALLOCATOR *abase, unsigned size)
+static rdb_ROPESEG *
+standalone_alloc(rdb_ALLOCATOR *abase, unsigned size)
 {
     my_CHUNKALLOC *alloc = (my_CHUNKALLOC *)abase;
     rdb_ROPESEG *seg;
@@ -80,13 +83,13 @@ static rdb_ROPESEG *standalone_alloc(rdb_ALLOCATOR *abase, unsigned size)
     return seg;
 }
 
-static rdb_ROPESEG *chunked_alloc(my_CHUNKALLOC *alloc)
+static rdb_ROPESEG *
+chunked_alloc(my_CHUNKALLOC *alloc)
 {
     rdb_ROPESEG *chunk = NULL;
     lcb_list_t *llcur, *llnext;
 
-    LCB_LIST_SAFE_FOR(llcur, llnext, (lcb_list_t *)&alloc->chunks)
-    {
+    LCB_LIST_SAFE_FOR(llcur, llnext, (lcb_list_t *)&alloc->chunks) {
         rdb_ROPESEG *cur = LCB_LIST_ITEM(llcur, rdb_ROPESEG, llnode);
 
         lcb_list_delete(&cur->llnode);
@@ -110,7 +113,8 @@ static rdb_ROPESEG *chunked_alloc(my_CHUNKALLOC *alloc)
     return chunk;
 }
 
-static void buf_reserve(rdb_ALLOCATOR *abase, rdb_ROPEBUF *buf, unsigned n)
+static void
+buf_reserve(rdb_ALLOCATOR *abase, rdb_ROPEBUF *buf, unsigned n)
 {
     my_CHUNKALLOC *alloc = (my_CHUNKALLOC *)abase;
     rdb_ROPESEG *lastseg = RDB_SEG_LAST(buf);
@@ -131,7 +135,8 @@ static void buf_reserve(rdb_ALLOCATOR *abase, rdb_ROPEBUF *buf, unsigned n)
     }
 }
 
-static rdb_ROPESEG *seg_realloc(rdb_ALLOCATOR *abase, rdb_ROPESEG *seg, unsigned n)
+static rdb_ROPESEG *
+seg_realloc(rdb_ALLOCATOR *abase, rdb_ROPESEG *seg, unsigned n)
 {
     seg->nalloc = n;
     seg->root = realloc(seg->root, n);
@@ -140,14 +145,16 @@ static rdb_ROPESEG *seg_realloc(rdb_ALLOCATOR *abase, rdb_ROPESEG *seg, unsigned
     return seg;
 }
 
-static void seg_release(rdb_ALLOCATOR *abase, rdb_ROPESEG *seg)
+static void
+seg_release(rdb_ALLOCATOR *abase, rdb_ROPESEG *seg)
 {
     release_chunk(abase, seg);
     alloc_decref(abase);
 }
 
 LCB_INTERNAL_API
-rdb_ALLOCATOR *rdb_chunkalloc_new(unsigned chunksize)
+rdb_ALLOCATOR *
+rdb_chunkalloc_new(unsigned chunksize)
 {
     rdb_ALLOCATOR *ret;
     my_CHUNKALLOC *alloc = calloc(1, sizeof(*alloc));

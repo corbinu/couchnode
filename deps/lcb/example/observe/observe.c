@@ -1,6 +1,6 @@
 /* -*- Mode: C; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2013-2019 Couchbase, Inc.
+ *     Copyright 2013-2017 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -24,15 +24,15 @@
 #include <string.h>
 #include <assert.h>
 #include <libcouchbase/couchbase.h>
-#include <libcouchbase/utils.h>
+#include <libcouchbase/api3.h>
 
-#define fail(msg)                                                                                                      \
-    fprintf(stderr, "%s\n", msg);                                                                                      \
+#define fail(msg) \
+    fprintf(stderr, "%s\n", msg); \
     exit(EXIT_FAILURE)
 
-#define fail2(msg, err)                                                                                                \
-    fprintf(stderr, "%s\n", msg);                                                                                      \
-    fprintf(stderr, "Error was 0x%x (%s)\n", err, lcb_strerror(NULL, err));                                            \
+#define fail2(msg, err) \
+    fprintf(stderr, "%s\n", msg); \
+    fprintf(stderr, "Error was 0x%x (%s)\n", err, lcb_strerror(NULL, err)); \
     exit(EXIT_FAILURE)
 
 typedef struct {
@@ -46,19 +46,21 @@ typedef struct {
     node_info *nodeinfo;
 } observe_info;
 
-static void observe_callback(lcb_INSTANCE *instance, int cbtype, const lcb_RESPBASE *rb)
+static void
+observe_callback(lcb_t instance, int cbtype, const lcb_RESPBASE *rb)
 {
-    const lcb_RESPOBSERVE *resp = (const lcb_RESPOBSERVE *)rb;
-    observe_info *obs_info = (observe_info *)resp->cookie;
+    const lcb_RESPOBSERVE *resp = (const lcb_RESPOBSERVE*)rb;
+    observe_info *obs_info = (observe_info *)rb->cookie;
     node_info *ni = &obs_info->nodeinfo[obs_info->nresp];
 
-    if (resp->nkey == 0) {
+    if (rb->nkey == 0) {
         fprintf(stderr, "All nodes have replied\n");
         return;
     }
 
-    if (resp->rc != LCB_SUCCESS) {
-        fprintf(stderr, "Failed to observe key from node. 0x%x (%s)\n", resp->rc, lcb_strerror(instance, resp->rc));
+    if (rb->rc != LCB_SUCCESS) {
+        fprintf(stderr, "Failed to observe key from node. 0x%x (%s)\n",
+            rb->rc, lcb_strerror(instance, rb->rc));
         obs_info->nresp++;
         return;
     }
@@ -74,13 +76,13 @@ static void observe_callback(lcb_INSTANCE *instance, int cbtype, const lcb_RESPB
 
 int main(int argc, char *argv[])
 {
-    lcb_INSTANCE *instance;
-    lcb_STATUS err;
-    lcb_CMDOBSERVE cmd = {0};
+    lcb_t instance;
+    lcb_error_t err;
+    lcb_CMDOBSERVE cmd = { 0 };
     lcb_MULTICMD_CTX *mctx = NULL;
     observe_info obs_info;
     unsigned nservers, ii;
-    struct lcb_create_st create_options = {0};
+    struct lcb_create_st create_options = { 0 };
 
     if (argc < 2) {
         fail("Requires key as argument\n"
@@ -110,12 +112,12 @@ int main(int argc, char *argv[])
     lcb_install_callback3(instance, LCB_CALLBACK_OBSERVE, observe_callback);
 
     nservers = lcb_get_num_nodes(instance);
-    obs_info.nodeinfo = calloc(nservers, sizeof(*obs_info.nodeinfo));
+    obs_info.nodeinfo = calloc(nservers, sizeof (*obs_info.nodeinfo));
     obs_info.nresp = 0;
 
     mctx = lcb_observe3_ctxnew(instance);
     LCB_CMD_SET_KEY(&cmd, argv[1], strlen(argv[1]));
-    mctx->addcmd(mctx, (const lcb_CMDBASE *)&cmd);
+    mctx->addcmd(mctx, (const lcb_CMDBASE*)&cmd);
 
     printf("observing the state of '%s':\n", argv[1]);
     if ((err = mctx->done(mctx, &obs_info)) != LCB_SUCCESS) {
@@ -126,7 +128,7 @@ int main(int argc, char *argv[])
     for (ii = 0; ii < obs_info.nresp; ii++) {
         node_info *ni = &obs_info.nodeinfo[ii];
         fprintf(stderr, "Got status from %s node:\n", ni->master ? "master" : "replica");
-        fprintf(stderr, "\tCAS: 0x0%llx\n", (unsigned long long)ni->cas);
+        fprintf(stderr, "\tCAS: 0x0%llx\n", ni->cas);
         fprintf(stderr, "\tStatus (RAW): 0x%02x\n", ni->status);
         fprintf(stderr, "\tExists [CACHE]: %s\n", ni->status & LCB_OBSERVE_NOT_FOUND ? "No" : "Yes");
         fprintf(stderr, "\tExists [DISK]: %s\n", ni->status & LCB_OBSERVE_PERSISTED ? "Yes" : "No");
@@ -141,7 +143,7 @@ int main(int argc, char *argv[])
     fprintf(stderr, "Will request CAS from master...\n");
     cmd.cmdflags |= LCB_CMDOBSERVE_F_MASTER_ONLY;
     mctx = lcb_observe3_ctxnew(instance);
-    mctx->addcmd(mctx, (const lcb_CMDBASE *)&cmd);
+    mctx->addcmd(mctx, (const lcb_CMDBASE*)&cmd);
     if ((err = mctx->done(mctx, &obs_info)) != LCB_SUCCESS) {
         fail2("Couldn't schedule observe request!\n", err);
     }
@@ -149,7 +151,7 @@ int main(int argc, char *argv[])
     lcb_wait(instance);
 
     assert(obs_info.nresp == 1 && obs_info.nodeinfo[0].master);
-    fprintf(stderr, "CAS on master is 0x%llx\n", (unsigned long long)obs_info.nodeinfo[0].cas);
+    fprintf(stderr, "CAS on master is 0x%llx\n", obs_info.nodeinfo[0].cas);
 
     lcb_destroy(instance);
     free(obs_info.nodeinfo);

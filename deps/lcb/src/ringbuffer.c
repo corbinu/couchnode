@@ -1,6 +1,6 @@
 /* -*- Mode: C; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2011-2019 Couchbase, Inc.
+ *     Copyright 2011-2012 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -22,6 +22,7 @@ static lcb_size_t minimum(lcb_size_t a, lcb_size_t b)
     return (a < b) ? a : b;
 }
 
+
 int ringbuffer_initialize(ringbuffer_t *buffer, lcb_size_t size)
 {
     char *root = malloc(size);
@@ -41,9 +42,11 @@ void ringbuffer_take_buffer(ringbuffer_t *buffer, char *buf, lcb_size_t size)
     buffer->read_head = buffer->root;
 }
 
+
 void ringbuffer_reset(ringbuffer_t *buffer)
 {
-    ringbuffer_consumed(buffer, ringbuffer_get_nbytes(buffer));
+    ringbuffer_consumed(buffer,
+                        ringbuffer_get_nbytes(buffer));
 }
 
 void ringbuffer_destruct(ringbuffer_t *buffer)
@@ -112,7 +115,9 @@ void *ringbuffer_get_write_head(ringbuffer_t *buffer)
     return buffer->write_head;
 }
 
-lcb_size_t ringbuffer_write(ringbuffer_t *buffer, const void *src, lcb_size_t nb)
+lcb_size_t ringbuffer_write(ringbuffer_t *buffer,
+                            const void *src,
+                            lcb_size_t nb)
 {
     const char *s = src;
     lcb_size_t nw = 0;
@@ -178,6 +183,7 @@ static void maybe_reset(ringbuffer_t *buffer)
     }
 }
 
+
 lcb_size_t ringbuffer_read(ringbuffer_t *buffer, void *dest, lcb_size_t nb)
 {
     char *d = dest;
@@ -237,7 +243,8 @@ lcb_size_t ringbuffer_peek(ringbuffer_t *buffer, void *dest, lcb_size_t nb)
     return ringbuffer_read(&copy, dest, nb);
 }
 
-lcb_size_t ringbuffer_peek_at(ringbuffer_t *buffer, lcb_size_t offset, void *dest, lcb_size_t nb)
+lcb_size_t ringbuffer_peek_at(ringbuffer_t *buffer, lcb_size_t offset,
+                              void *dest, lcb_size_t nb)
 {
     ringbuffer_t copy = *buffer;
     lcb_size_t n = ringbuffer_read(&copy, NULL, offset);
@@ -264,7 +271,9 @@ lcb_size_t ringbuffer_get_nbytes(ringbuffer_t *buffer)
     return buffer->nbytes;
 }
 
-lcb_size_t ringbuffer_update(ringbuffer_t *buffer, ringbuffer_direction_t direction, const void *src, lcb_size_t nb)
+lcb_size_t ringbuffer_update(ringbuffer_t *buffer,
+                             ringbuffer_direction_t direction,
+                             const void *src, lcb_size_t nb)
 {
     const char *s = src;
     lcb_size_t nw, ret = 0;
@@ -307,7 +316,10 @@ lcb_size_t ringbuffer_update(ringbuffer_t *buffer, ringbuffer_direction_t direct
     return ret;
 }
 
-void ringbuffer_get_iov(ringbuffer_t *buffer, ringbuffer_direction_t direction, struct lcb_iovec_st *iov)
+
+void ringbuffer_get_iov(ringbuffer_t *buffer,
+                        ringbuffer_direction_t direction,
+                        struct lcb_iovec_st *iov)
 {
     iov[1].iov_base = buffer->root;
     iov[1].iov_len = 0;
@@ -335,7 +347,9 @@ void ringbuffer_get_iov(ringbuffer_t *buffer, ringbuffer_direction_t direction, 
     }
 }
 
-int ringbuffer_is_continous(ringbuffer_t *buffer, ringbuffer_direction_t direction, lcb_size_t nb)
+int ringbuffer_is_continous(ringbuffer_t *buffer,
+                            ringbuffer_direction_t direction,
+                            lcb_size_t nb)
 {
     int ret;
 
@@ -365,7 +379,8 @@ int ringbuffer_append(ringbuffer_t *src, ringbuffer_t *dest)
     char buffer[1024];
     lcb_size_t nr, nw;
 
-    while ((nr = ringbuffer_read(src, buffer, sizeof(buffer))) != 0) {
+    while ((nr = ringbuffer_read(src, buffer,
+                                 sizeof(buffer))) != 0) {
         lcb_assert(ringbuffer_ensure_capacity(dest, nr));
         nw = ringbuffer_write(dest, buffer, nr);
         lcb_assert(nw == nr);
@@ -374,7 +389,8 @@ int ringbuffer_append(ringbuffer_t *src, ringbuffer_t *dest)
     return 1;
 }
 
-int ringbuffer_memcpy(ringbuffer_t *dst, ringbuffer_t *src, lcb_size_t nbytes)
+int ringbuffer_memcpy(ringbuffer_t *dst, ringbuffer_t *src,
+                      lcb_size_t nbytes)
 {
     ringbuffer_t copy = *src;
     struct lcb_iovec_st iov[2];
@@ -412,7 +428,8 @@ int ringbuffer_ensure_alignment(ringbuffer_t *c)
 
     if (addr % 8 != 0) {
         ringbuffer_t copy;
-        if (ringbuffer_initialize(&copy, c->size) == 0 || ringbuffer_memcpy(&copy, c, ringbuffer_get_nbytes(c)) == -1) {
+        if (ringbuffer_initialize(&copy, c->size) == 0 ||
+                ringbuffer_memcpy(&copy, c, ringbuffer_get_nbytes(c)) == -1) {
             return -1;
         }
         ringbuffer_destruct(c);

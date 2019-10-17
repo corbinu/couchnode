@@ -1,6 +1,6 @@
 /* -*- Mode: C; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2014-2019 Couchbase, Inc.
+ *     Copyright 2014-2018 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -22,54 +22,48 @@
 #define LCB_DOCREQ_H
 
 #include <libcouchbase/couchbase.h>
+#include <libcouchbase/api3.h>
 #include <libcouchbase/pktfwd.h>
 #include <lcbio/lcbio.h>
 #include "sllist.h"
-#include "internalstructs.h"
 
-namespace lcb
-{
-namespace docreq
-{
+namespace lcb {
+namespace docreq {
 
 struct Queue;
 struct DocRequest;
 
 struct Queue {
-    Queue(lcb_INSTANCE *);
+    Queue(lcb_t);
     ~Queue();
-    void add(DocRequest *);
+    void add(DocRequest*);
     void unref();
-    void ref()
-    {
-        refcount++;
-    }
+    void ref() {refcount++;}
     void cancel();
     void check();
-    bool has_pending() const
-    {
+    bool has_pending() const {
         return n_awaiting_response || n_awaiting_schedule;
     }
 
-    lcb_INSTANCE *instance;
+    lcb_t instance;
     void *parent;
     lcbio_pTIMER timer;
 
     /**Called when a operation is ready to be scheduled
      * @param The queue
      * @param The document */
-    lcb_STATUS (*cb_schedule)(struct Queue *, lcb::docreq::DocRequest *dreq);
+    lcb_error_t (*cb_schedule)(struct Queue*, lcb::docreq::DocRequest *dreq);
 
     /**Called when a document is ready
      * @param The queue
      * @param The document */
-    void (*cb_ready)(struct Queue *, struct DocRequest *);
+    void (*cb_ready)(struct Queue*,struct DocRequest*);
 
     /**Called when throttle state changes. This may be used by higher layers
      * for appropriate flow control
      * @param The queue
      * @param enabled Whether throttling has been enabled or disabled */
-    void (*cb_throttle)(struct Queue *, int enabled);
+    void (*cb_throttle)(struct Queue*, int enabled);
 
     /**This queue holds requests which were not yet issued to the library
      * via lcb_get3(). This list is aggregated after each chunk callback and
@@ -94,11 +88,12 @@ struct DocRequest {
     lcb_RESPCALLBACK callback;
     sllist_node slnode;
     Queue *parent;
-    lcb_RESPGET_ docresp;
+    lcb_RESPGET docresp;
     /* To be filled in by the subclass */
     lcb_IOV docid;
     unsigned ready;
 };
+
 
 } // namespace docreq
 } // namespace lcb

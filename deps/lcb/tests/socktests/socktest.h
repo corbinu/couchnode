@@ -1,20 +1,3 @@
-/* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
-/*
- *     Copyright 2011-2019 Couchbase, Inc.
- *
- *   Licensed under the Apache License, Version 2.0 (the "License");
- *   you may not use this file except in compliance with the License.
- *   You may obtain a copy of the License at
- *
- *       http://www.apache.org/licenses/LICENSE-2.0
- *
- *   Unless required by applicable law or agreed to in writing, software
- *   distributed under the License is distributed on an "AS IS" BASIS,
- *   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *   See the License for the specific language governing permissions and
- *   limitations under the License.
- */
-
 /**
  * @file
  * Core routines and classes for @ref LCBIO tests.
@@ -36,7 +19,8 @@
 
 using namespace LCBTest;
 
-static inline void hostFromSockFD(SockFD *sfd, lcb_host_t *tgt)
+static inline void
+hostFromSockFD(SockFD *sfd, lcb_host_t *tgt)
 {
     strcpy(tgt->host, sfd->getLocalHost().c_str());
     sprintf(tgt->port, "%d", sfd->getLocalPort());
@@ -46,9 +30,8 @@ class Loop;
 struct ESocket;
 
 /** Wrapper class for @ref lcbio_CTXPROCS */
-class IOActions
-{
-  public:
+class IOActions {
+public:
     virtual void onRead(ESocket *s, size_t nr);
     virtual void onError(ESocket *s);
     virtual void onFlushDone(ESocket *s, size_t, size_t n) {}
@@ -115,7 +98,7 @@ struct ESocket {
     lcbio_OSERR syserr;
 
     /** Contains the captured library error codes, if applicable */
-    lcb_STATUS lasterr;
+    lcb_error_t lasterr;
     Loop *parent;
 
     /** Actions implementation. The various callbacks in @ref lcbio_CTXPROCS
@@ -131,8 +114,7 @@ struct ESocket {
 
     static IOActions defaultActions;
 
-    ESocket()
-    {
+    ESocket() {
         sock = NULL;
         ctx = NULL;
         parent = NULL;
@@ -148,15 +130,9 @@ struct ESocket {
     void close();
 
     /** Unsets the underlying @ref lcbio_SOCKET object */
-    void clear()
-    {
-        ctx = NULL;
-    }
+    void clear() { ctx = NULL; }
 
-    ~ESocket()
-    {
-        close();
-    }
+    ~ESocket() { close(); }
 
     /**
      * Add data to be sent. Call the schedule() method to schedule the operation.
@@ -165,13 +141,11 @@ struct ESocket {
      *
      * @see schedule()
      */
-    void put(const void *b, size_t n)
-    {
+    void put(const void *b, size_t n) {
         lcbio_ctx_put(ctx, b, n);
     }
 
-    void put(const std::string &s)
-    {
+    void put(const std::string& s) {
         put(s.c_str(), s.size());
     }
 
@@ -180,14 +154,12 @@ struct ESocket {
      *
      * @param n The minimum number of bytes to be read
      */
-    void reqrd(size_t n)
-    {
+    void reqrd(size_t n) {
         lcbio_ctx_rwant(ctx, n);
     }
 
     /** Wraps lcbio_ctx_schedule() */
-    void schedule()
-    {
+    void schedule() {
         lcbio_ctx_schedule(ctx);
     }
 
@@ -196,26 +168,24 @@ struct ESocket {
      *
      * @return A copy of the contents.
      */
-    std::string getReceived()
-    {
+    std::string getReceived() {
         return std::string(readbuf.begin(), readbuf.end());
     }
 
-    size_t getUnreadSize()
-    {
+
+    size_t getUnreadSize() {
         return rdb_get_nused(&ctx->ior);
     }
 
-    void setActions(IOActions *ioa)
-    {
+    void setActions(IOActions *ioa) {
         actions = ioa;
     }
 
     /** Internal method used to associate the socket (if any) with this object */
-    void assign(lcbio_SOCKET *sock, lcb_STATUS err);
+    void assign(lcbio_SOCKET *sock, lcb_error_t err);
 
     /** Internal buffer to store read data */
-    std::vector< char > readbuf;
+    std::vector<char> readbuf;
 };
 
 /**
@@ -224,9 +194,8 @@ struct ESocket {
  * The expired() method should be implemented by subclasses, and will be
  * called once the timer expires.
  */
-class Timer
-{
-  public:
+class Timer {
+public:
     /**Create a new timer
      * @param iot The parent IO Table */
     Timer(lcbio_TABLE *iot);
@@ -252,9 +221,10 @@ class Timer
     /** Asynchronously call the #expired() method. */
     void signal();
 
-  private:
+private:
     lcbio_pTIMER timer;
 };
+
 
 /**
  * This class checks if the loop should break or not. If it should, then
@@ -262,9 +232,8 @@ class Timer
  * in 'always run' mode and don't particularly break once no I/O handles
  * remain active.
  */
-class BreakCondition
-{
-  public:
+class BreakCondition {
+public:
     BreakCondition();
     virtual ~BreakCondition() {}
 
@@ -277,12 +246,10 @@ class BreakCondition
      *
      * @return true if the loop was forcefully broken because shouldBreak() returned
      * true. */
-    bool didBreak()
-    {
-        return broke;
-    }
+    bool didBreak() { return broke; }
 
-  protected:
+protected:
+
     /**Subclasses should implement this.
      * @return true if the loop should break.
      * @note This function is only called as long as #broke is false
@@ -298,22 +265,14 @@ class BreakCondition
  * @ref LCBTest::Future object is complete. If the underlying future is complete,
  * it will break the loop.
  */
-class FutureBreakCondition : public BreakCondition
-{
-  public:
+class FutureBreakCondition : public BreakCondition {
+public:
     /** @param ft The future to poll */
-    FutureBreakCondition(Future *ft) : BreakCondition()
-    {
-        f = ft;
-    }
+    FutureBreakCondition(Future *ft) : BreakCondition() { f = ft; }
 
     virtual ~FutureBreakCondition() {}
-
-  protected:
-    bool shouldBreakImpl()
-    {
-        return f->checkDone();
-    }
+protected:
+    bool shouldBreakImpl() { return f->checkDone(); }
     Future *f;
 };
 
@@ -322,20 +281,14 @@ class FutureBreakCondition : public BreakCondition
  * buffer from the underying @ref ESocket / @ref lcbio_SOCKET has been completely
  * flushed (and thus no longer needed by the underlying socket implementation).
  */
-class FlushedBreakCondition : public BreakCondition
-{
-  public:
+class FlushedBreakCondition : public BreakCondition {
+public:
     /** @param s The socket to check */
-    FlushedBreakCondition(ESocket *s)
-    {
-        sock = s;
-    }
+    FlushedBreakCondition(ESocket *s) { sock = s; }
     virtual ~FlushedBreakCondition() {}
-
-  protected:
+protected:
     bool shouldBreakImpl();
-
-  private:
+private:
     ESocket *sock;
 };
 
@@ -343,24 +296,17 @@ class FlushedBreakCondition : public BreakCondition
  * This @ref BreakCondition implementation checks to see if the given socket
  * has read at least a certain amount of data
  */
-class ReadBreakCondition : public BreakCondition
-{
-  public:
+class ReadBreakCondition : public BreakCondition {
+public:
     /**
      * @param s The socket
      * @param nr The minimum number of bytes to read before breaking
      */
-    ReadBreakCondition(ESocket *s, unsigned nr)
-    {
-        sock = s;
-        expected = nr;
-    }
+    ReadBreakCondition(ESocket *s, unsigned nr) { sock = s; expected = nr; }
     virtual ~ReadBreakCondition() {}
-
-  protected:
+protected:
     bool shouldBreakImpl();
-
-  private:
+private:
     unsigned expected;
     ESocket *sock;
 };
@@ -372,58 +318,42 @@ class ReadBreakCondition : public BreakCondition
  * This is generally useful to use in tests where an error is expected, but where
  * the loop may terminate before the error is received.
  */
-class ErrorBreakCondition : public BreakCondition
-{
-  public:
+class ErrorBreakCondition : public BreakCondition {
+public:
     /** @param s Socket to monitor for errors. */
-    ErrorBreakCondition(ESocket *s) : BreakCondition()
-    {
-        sock = s;
-    }
-
-  protected:
+    ErrorBreakCondition(ESocket *s) : BreakCondition() { sock = s; }
+protected:
     ESocket *sock;
-    bool shouldBreakImpl()
-    {
-        return sock->lasterr != LCB_SUCCESS;
-    }
+    bool shouldBreakImpl() { return sock->lasterr != LCB_SUCCESS; }
 };
 
 /** TODO: Is this really a break condition? This seems to be used for testing
  * the invocation of lcbio_ctx_close_ex()'s callback argument. */
-class CtxCloseBreakCondition : public BreakCondition
-{
-  public:
-    CtxCloseBreakCondition(ESocket *sock) : BreakCondition()
-    {
+class CtxCloseBreakCondition : public BreakCondition {
+public:
+    CtxCloseBreakCondition(ESocket *sock) : BreakCondition() {
         s = sock;
         destroyed = false;
     }
 
-    void gotDtor()
-    {
+    void gotDtor() {
         destroyed = true;
     }
 
     void closeCtx();
 
-  protected:
+protected:
     ESocket *s;
     bool destroyed;
-    bool shouldBreakImpl()
-    {
+    bool shouldBreakImpl() {
         return destroyed;
     }
 };
 
 /** This implementation will always break the loop. */
-class NullBreakCondition : public BreakCondition
-{
-  public:
-    bool shouldBreakImpl()
-    {
-        return true;
-    }
+class NullBreakCondition : public BreakCondition {
+public:
+    bool shouldBreakImpl() { return true; }
 };
 
 /**Internal class used to allow the loop to 'poll' a @ref BreakCondition.
@@ -432,9 +362,8 @@ class NullBreakCondition : public BreakCondition
 class BreakTimer;
 
 /** Class representing the underlying libcouchbase event loop. */
-class Loop
-{
-  public:
+class Loop {
+public:
     Loop();
     ~Loop();
 
@@ -480,10 +409,7 @@ class Loop
 
     /**Sets the condition upon which the loop will terminate
      * @param bc the condition */
-    void setBreakCondition(BreakCondition *bc)
-    {
-        bcond = bc;
-    }
+    void setBreakCondition(BreakCondition *bc) { bcond = bc; }
 
     /* These members are not really public, but are available for inspection */
     lcbio_MGR *sockpool;
@@ -492,7 +418,7 @@ class Loop
     lcb_io_opt_t io;
     lcbio_pTABLE iot;
 
-  private:
+private:
     void scheduleBreak();
     void cancelBreak();
     void initSockCommon(ESocket *s);
@@ -500,16 +426,14 @@ class Loop
     friend class BreakTimer;
 
     BreakTimer *breakTimer;
-    std::list< Future * > pending;
+    std::list<Future *> pending;
     BreakCondition *bcond;
 };
 
-class SockTest : public ::testing::Test
-{
-  protected:
+class SockTest : public ::testing::Test {
+protected:
     Loop *loop;
-    void SetUp()
-    {
+    void SetUp() {
         lcb_initialize_socket_subsystem();
 #ifndef _WIN32
         signal(SIGPIPE, SIG_IGN);
@@ -517,8 +441,7 @@ class SockTest : public ::testing::Test
         loop = new Loop();
     }
 
-    void TearDown()
-    {
+    void TearDown() {
         delete loop;
     }
 };

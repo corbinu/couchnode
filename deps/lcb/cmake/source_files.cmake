@@ -40,11 +40,14 @@ SET(LCB_CORE_SRC
     ${LCB_BCONF_SRC}
     ${LCB_N1QL_SRC}
     src/callbacks.c
+    src/legacy.c
     src/iofactory.c
     src/settings.c
     src/utilities.c)
 
-FILE(GLOB LCB_TRACING_SRC src/tracing/*.cc)
+IF (LCB_TRACING)
+  FILE(GLOB LCB_TRACING_SRC src/tracing/*.cc)
+ENDIF()
 
 SET(LCB_CORE_CXXSRC
     src/instance.cc
@@ -56,7 +59,6 @@ SET(LCB_CORE_CXXSRC
     src/bucketconfig/bc_file.cc
     src/bucketconfig/bc_static.cc
     src/bucketconfig/confmon.cc
-    src/collections.cc
     src/connspec.cc
     src/crypto.cc
     src/dns-srv.cc
@@ -70,6 +72,7 @@ SET(LCB_CORE_CXXSRC
     src/http/http_io.cc
     src/lcbht/lcbht.cc
     src/newconfig.cc
+    src/n1ql/params.cc
     src/n1ql/n1ql.cc
     src/n1ql/ixmgmt.cc
     src/cbft.cc

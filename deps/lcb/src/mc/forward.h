@@ -1,6 +1,6 @@
 /* -*- Mode: C; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2014-2019 Couchbase, Inc.
+ *     Copyright 2014 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -23,6 +23,7 @@ extern "C" {
 
 #include "iovcursor.h"
 
+
 /**
  * Copy over the entire packet to the internal buffers. Input buffer is
  * temporary.
@@ -34,7 +35,8 @@ extern "C" {
  */
 #define MC_FWD_OPT_NOMAP 0x02
 
-void mc_iovinfo_init(mc_IOVINFO *info, const nb_IOV *iov, unsigned niov);
+void
+mc_iovinfo_init(mc_IOVINFO *info, const nb_IOV *iov, unsigned niov);
 
 /**
  * Forward a packet to an upstream server.
@@ -78,7 +80,9 @@ void mc_iovinfo_init(mc_IOVINFO *info, const nb_IOV *iov, unsigned niov);
  * </li>
  * </ol>
  */
-lcb_STATUS mc_forward_packet(mc_CMDQUEUE *cq, mc_IOVINFO *info, mc_PACKET **pkt, mc_PIPELINE **pl, int options);
+lcb_error_t
+mc_forward_packet(mc_CMDQUEUE *cq,
+    mc_IOVINFO *info, mc_PACKET **pkt, mc_PIPELINE **pl, int options);
 
 #ifdef __cplusplus
 }

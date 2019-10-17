@@ -12,34 +12,26 @@ var TEST_DOCS = [
   { x: 2, y: 2, name: 'x2,y2' },
 ];
 
-async function upsertTestData(target, testUid) {
-  var promises = [];
-
+function upsertTestData(bucket, testUid, done) {
+  var remainingUpserts = TEST_DOCS.length;
   for (var i = 0; i < TEST_DOCS.length; ++i) {
     var testDocKey = testUid + '::' + i;
     var testDoc = TEST_DOCS[i];
     testDoc.testUid = testUid;
 
-    promises.push(target.upsert(testDocKey, testDoc));
-  }
+    bucket.upsert(testDocKey, testDoc, function(err) {
+      if (err) {
+        throw err;
+      }
 
-  return Promise.all(promises);
+      if (--remainingUpserts === 0) {
+        done();
+      }
+    });
+  }
 }
 
 module.exports.upsertData = upsertTestData;
-
-async function removeTestData(target, testUid) {
-  var promises = [];
-
-  for (var i = 0; i < TEST_DOCS.length; ++i) {
-    var testDocKey = testUid + '::' + i;
-    promises.push(target.remove(testDocKey));
-  }
-
-  return Promise.all(promises);
-}
-
-module.exports.removeTestData = removeTestData;
 
 function testDocCount() {
   return TEST_DOCS.length;

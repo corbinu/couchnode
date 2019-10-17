@@ -1,30 +1,32 @@
 /* -*- Mode: C; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2013-2019 Couchbase, Inc.
- *
- *   Licensed under the Apache License, Version 2.0 (the "License");
- *   you may not use this file except in compliance with the License.
- *   You may obtain a copy of the License at
- *
- *       http://www.apache.org/licenses/LICENSE-2.0
- *
- *   Unless required by applicable law or agreed to in writing, software
- *   distributed under the License is distributed on an "AS IS" BASIS,
- *   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *   See the License for the specific language governing permissions and
- *   limitations under the License.
- */
+*     Copyright 2013 Couchbase, Inc.
+*
+*   Licensed under the Apache License, Version 2.0 (the "License");
+*   you may not use this file except in compliance with the License.
+*   You may obtain a copy of the License at
+*
+*       http://www.apache.org/licenses/LICENSE-2.0
+*
+*   Unless required by applicable law or agreed to in writing, software
+*   distributed under the License is distributed on an "AS IS" BASIS,
+*   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+*   See the License for the specific language governing permissions and
+*   limitations under the License.
+*/
 
 /**
- * New-Style v1 plugin for Windows, Using IOCP
- * @author Mark Nunberg
- */
+* New-Style v1 plugin for Windows, Using IOCP
+* @author Mark Nunberg
+*/
 
 #include "iocp_iops.h"
 #include <stdio.h>
 #include <stdlib.h>
-static int start_write(lcb_io_opt_t iobase, lcb_sockdata_t *sockbase, struct lcb_iovec_st *iov, lcb_size_t niov,
-                       void *uarg, lcb_ioC_write2_callback callback)
+static int
+start_write(lcb_io_opt_t iobase, lcb_sockdata_t *sockbase,
+struct lcb_iovec_st *iov, lcb_size_t niov, void *uarg,
+    lcb_ioC_write2_callback callback)
 {
     iocp_t *io = (iocp_t *)iobase;
     iocp_write_t *w;
@@ -40,10 +42,7 @@ static int start_write(lcb_io_opt_t iobase, lcb_sockdata_t *sockbase, struct lcb
     } else {
         w = calloc(1, sizeof(*w));
         assert(w);
-        if (!w) {
-            iobase->v.v2.error = WSA_NOT_ENOUGH_MEMORY;
-            return -1;
-        }
+        if (!w) { iobase->v.v2.error = WSA_NOT_ENOUGH_MEMORY; return -1; }
 
         w->state = IOCP_WRITEBUF_ALLOCATED;
         w->ol_write.action = LCBIOCP_ACTION_WRITE;
@@ -54,15 +53,17 @@ static int start_write(lcb_io_opt_t iobase, lcb_sockdata_t *sockbase, struct lcb
     w->uarg = uarg;
 
     /* nbytes is ignored here, but mandatory for WSASend() */
-    rv = WSASend(sd->sSocket, (WSABUF *)iov, niov, &dwNbytes, 0 /* Flags */, (OVERLAPPED *)&w->ol_write,
-                 NULL /* IOCP Callback */);
+    rv = WSASend(sd->sSocket, (WSABUF *)iov, niov, &dwNbytes,
+        0 /* Flags */, (OVERLAPPED *)&w->ol_write, NULL /* IOCP Callback */);
     rv = iocp_just_scheduled(io, &w->ol_write, rv);
     /* TODO: if write completes immediately, maybe return a special code */
     return rv;
 }
 
-static int start_read(lcb_io_opt_t iobase, lcb_sockdata_t *sockbase, lcb_IOV *iov, lcb_size_t niov, void *uarg,
-                      lcb_ioC_read2_callback callback)
+static int
+start_read(lcb_io_opt_t iobase, lcb_sockdata_t *sockbase,
+    lcb_IOV *iov, lcb_size_t niov, void *uarg,
+    lcb_ioC_read2_callback callback)
 {
     int rv;
     DWORD flags = 0, dwNbytes;
@@ -79,19 +80,19 @@ static int start_read(lcb_io_opt_t iobase, lcb_sockdata_t *sockbase, lcb_IOV *io
     ZeroMemory(&sd->ol_read.base, sizeof(OVERLAPPED));
 
     /* nbytes and flags, required as an argument, but unused in our code */
-    rv = WSARecv(sd->sSocket, (WSABUF *)iov, niov, &dwNbytes, &flags, (OVERLAPPED *)&sd->ol_read, NULL);
+    rv = WSARecv(sd->sSocket, (WSABUF *)iov, niov, &dwNbytes,
+        &flags, (OVERLAPPED *)&sd->ol_read, NULL);
 
     return iocp_just_scheduled(io, &sd->ol_read, rv);
 }
 
-static int start_connect(lcb_io_opt_t iobase, lcb_sockdata_t *sdbase, const struct sockaddr *name, unsigned int namelen,
-                         lcb_io_connect_cb callback)
+static int
+start_connect(lcb_io_opt_t iobase, lcb_sockdata_t *sdbase,
+    const struct sockaddr *name, unsigned int namelen,
+    lcb_io_connect_cb callback)
 {
     /* In order to use ConnectEx(), the socket must be bound. */
-    union {
-        struct sockaddr_in in4;
-        struct sockaddr_in6 in6;
-    } u_addr;
+    union { struct sockaddr_in in4; struct sockaddr_in6 in6; } u_addr;
     BOOL result;
     LPFN_CONNECTEX pConnectEx;
     iocp_t *io = (iocp_t *)iobase;
@@ -101,10 +102,7 @@ static int start_connect(lcb_io_opt_t iobase, lcb_sockdata_t *sdbase, const stru
     conn = calloc(1, sizeof(*conn));
 
     assert(conn);
-    if (conn == NULL) {
-        iobase->v.v2.error = WSA_NOT_ENOUGH_MEMORY;
-        return -1;
-    }
+    if (conn == NULL) { iobase->v.v2.error = WSA_NOT_ENOUGH_MEMORY; return -1; }
 
     conn->cb = callback;
     conn->ol_conn.sd = sd;
@@ -135,15 +133,16 @@ static int start_connect(lcb_io_opt_t iobase, lcb_sockdata_t *sdbase, const stru
         return -1;
     }
 
-    result = pConnectEx(sd->sSocket, name, namelen, NULL, 0,
-                        NULL, /* Optional buffer and length to send when connected. (unused)*/
-                        (OVERLAPPED *)conn);
+    result = pConnectEx(sd->sSocket, name, namelen,
+                NULL, 0, NULL, /* Optional buffer and length to send when connected. (unused)*/
+                (OVERLAPPED *)conn);
 
     /** Other functions return 0 to indicate success. Here it's the opposite */
     return iocp_just_scheduled(io, &conn->ol_conn, result == TRUE ? 0 : -1);
 }
 
-static lcb_sockdata_t *create_socket(lcb_io_opt_t iobase, int domain, int type, int protocol)
+static lcb_sockdata_t *
+create_socket(lcb_io_opt_t iobase, int domain, int type, int protocol)
 {
     iocp_t *io = (iocp_t *)iobase;
     HANDLE hResult;
@@ -156,7 +155,9 @@ static lcb_sockdata_t *create_socket(lcb_io_opt_t iobase, int domain, int type, 
     }
 
     /* We need to use WSASocket to set the WSA_FLAG_OVERLAPPED option */
-    s = WSASocket(domain, type, protocol, NULL /* protocol info */, 0 /* "Group" */, WSA_FLAG_OVERLAPPED);
+    s = WSASocket(domain, type, protocol,
+        NULL /* protocol info */, 0 /* "Group" */,
+        WSA_FLAG_OVERLAPPED);
 
     if (s == INVALID_SOCKET) {
         iocp_set_last_error(iobase, s);
@@ -165,21 +166,22 @@ static lcb_sockdata_t *create_socket(lcb_io_opt_t iobase, int domain, int type, 
     }
 
     /**
-     * Disable the send buffer. This ensures a callback is invoked.
-     * If this is not set, the send operation may complete immediately
-     * and our operations may never be queued. The KB article says we should
-     * ensure multiple write requests are batched into a single operation, which
-     * is something we already do :)
-     *
-     * See http://support.microsoft.com/kb/181611 for details.
-     * Disabled currently until we can get actual benchmark numbers
-     */
+    * Disable the send buffer. This ensures a callback is invoked.
+    * If this is not set, the send operation may complete immediately
+    * and our operations may never be queued. The KB article says we should
+    * ensure multiple write requests are batched into a single operation, which
+    * is something we already do :)
+    *
+    * See http://support.microsoft.com/kb/181611 for details.
+    * Disabled currently until we can get actual benchmark numbers
+    */
     if (0) {
         int optval = 0, rv;
-        rv = setsockopt(s, SOL_SOCKET, SO_SNDBUF, (const char *)&optval, sizeof optval);
+        rv = setsockopt(s, SOL_SOCKET, SO_SNDBUF, (const char*)&optval, sizeof optval);
     }
 
-    hResult = CreateIoCompletionPort((HANDLE)s, io->hCompletionPort, (ULONG_PTR)sd, 0 /* nthreads */);
+    hResult = CreateIoCompletionPort((HANDLE)s,
+        io->hCompletionPort, (ULONG_PTR)sd, 0 /* nthreads */);
 
     if (hResult == NULL) {
         iocp_set_last_error(iobase, s);
@@ -203,7 +205,8 @@ static lcb_sockdata_t *create_socket(lcb_io_opt_t iobase, int domain, int type, 
     return &sd->sd_base;
 }
 
-static unsigned int close_socket(lcb_io_opt_t iobase, lcb_sockdata_t *sockbase)
+static unsigned int
+close_socket(lcb_io_opt_t iobase, lcb_sockdata_t *sockbase)
 {
     iocp_sockdata_t *sd = (iocp_sockdata_t *)sockbase;
 
@@ -215,7 +218,9 @@ static unsigned int close_socket(lcb_io_opt_t iobase, lcb_sockdata_t *sockbase)
     return 0;
 }
 
-static int sock_nameinfo(lcb_io_opt_t iobase, lcb_sockdata_t *sockbase, struct lcb_nameinfo_st *ni)
+static int
+sock_nameinfo(lcb_io_opt_t iobase,
+    lcb_sockdata_t *sockbase, struct lcb_nameinfo_st *ni)
 {
     iocp_sockdata_t *sd = (iocp_sockdata_t *)sockbase;
     getsockname(sd->sSocket, ni->local.name, ni->local.len);
@@ -223,13 +228,14 @@ static int sock_nameinfo(lcb_io_opt_t iobase, lcb_sockdata_t *sockbase, struct l
     return 0;
 }
 
-static void *create_timer(lcb_io_opt_t iobase)
+static void *
+create_timer(lcb_io_opt_t iobase)
 {
-    (void)iobase;
-    return calloc(1, sizeof(iocp_timer_t));
+    (void)iobase; return calloc(1, sizeof(iocp_timer_t));
 }
 
-static void delete_timer(lcb_io_opt_t iobase, void *opaque)
+static void
+delete_timer(lcb_io_opt_t iobase, void *opaque)
 {
     iocp_timer_t *tmr = (iocp_timer_t *)opaque;
     iocp_t *io = (iocp_t *)iobase;
@@ -239,7 +245,9 @@ static void delete_timer(lcb_io_opt_t iobase, void *opaque)
     }
 }
 
-static int update_timer(lcb_io_opt_t iobase, void *opaque, lcb_U32 usec, void *arg, lcb_ioE_callback cb)
+static int
+update_timer(lcb_io_opt_t iobase, void *opaque, lcb_U32 usec, void *arg,
+    lcb_ioE_callback cb)
 {
     iocp_t *io = (iocp_t *)iobase;
     iocp_timer_t *tmr = (iocp_timer_t *)opaque;
@@ -258,13 +266,15 @@ static int update_timer(lcb_io_opt_t iobase, void *opaque, lcb_U32 usec, void *a
     return 0;
 }
 
-static void destroy_timer(lcb_io_opt_t iobase, void *opaque)
+static void
+destroy_timer(lcb_io_opt_t iobase, void *opaque)
 {
     free(opaque);
     (void)iobase;
 }
 
-static int set_nbio(SOCKET s, u_long mode)
+static int
+set_nbio(SOCKET s, u_long mode)
 {
     int rv;
     rv = ioctlsocket(s, FIONBIO, &mode);
@@ -276,7 +286,8 @@ static int set_nbio(SOCKET s, u_long mode)
     }
 }
 
-static int check_closed(lcb_io_opt_t io, lcb_sockdata_t *sockbase, int flags)
+static int
+check_closed(lcb_io_opt_t io, lcb_sockdata_t *sockbase, int flags)
 {
     int rv, err;
     char buf;
@@ -323,14 +334,14 @@ static int check_closed(lcb_io_opt_t io, lcb_sockdata_t *sockbase, int flags)
     }
 }
 
-static void iops_dtor(lcb_io_opt_t iobase)
+static void
+iops_dtor(lcb_io_opt_t iobase)
 {
     iocp_t *io = (iocp_t *)iobase;
     lcb_list_t *cur;
 
     /** Close all sockets first so we can get events for them */
-    LCB_LIST_FOR(cur, &io->sockets)
-    {
+    LCB_LIST_FOR(cur, &io->sockets) {
         iocp_sockdata_t *sd;
         sd = LCB_LIST_ITEM(cur, iocp_sockdata_t, list);
         if (sd->sSocket != INVALID_SOCKET) {
@@ -346,7 +357,8 @@ static void iops_dtor(lcb_io_opt_t iobase)
         iocp_sockdata_t *sd;
         iocp_overlapped_t *ol;
 
-        GetQueuedCompletionStatus(io->hCompletionPort, &nbytes, &completionKey, &pOl, 0 /* Timeout */);
+        GetQueuedCompletionStatus(io->hCompletionPort,
+            &nbytes, &completionKey, &pOl, 0 /* Timeout */);
         sd = (iocp_sockdata_t *)completionKey;
         ol = (iocp_overlapped_t *)pOl;
 
@@ -366,8 +378,7 @@ static void iops_dtor(lcb_io_opt_t iobase)
     }
 
     /* Destroy all remaining sockets */
-    LCB_LIST_FOR(cur, &io->sockets)
-    {
+    LCB_LIST_FOR(cur, &io->sockets) {
         iocp_sockdata_t *sd = LCB_LIST_ITEM(cur, iocp_sockdata_t, list);
 
         IOCP_LOG(IOCP_WARN, "Leak detected in socket %p (%lu). Refcount=%d", sd, sd->sSocket, sd->refcount);
@@ -383,8 +394,10 @@ static void iops_dtor(lcb_io_opt_t iobase)
     free(io);
 }
 
-static void get_procs(int version, lcb_loop_procs *loop, lcb_timer_procs *timer, lcb_bsd_procs *bsd, lcb_ev_procs *ev,
-                      lcb_completion_procs *iocp, lcb_iomodel_t *model)
+static void
+get_procs(int version, lcb_loop_procs *loop, lcb_timer_procs *timer,
+    lcb_bsd_procs *bsd, lcb_ev_procs *ev, lcb_completion_procs *iocp,
+    lcb_iomodel_t *model)
 {
     *model = LCB_IOMODEL_COMPLETION;
 
@@ -408,7 +421,7 @@ static void get_procs(int version, lcb_loop_procs *loop, lcb_timer_procs *timer,
 }
 
 LIBCOUCHBASE_API
-lcb_STATUS lcb_iocp_new_iops(int version, lcb_io_opt_t *ioret, void *arg)
+lcb_error_t lcb_iocp_new_iops(int version, lcb_io_opt_t *ioret, void *arg)
 {
     iocp_t *io;
     lcb_io_opt_t tbl;
@@ -429,7 +442,8 @@ lcb_STATUS lcb_iocp_new_iops(int version, lcb_io_opt_t *ioret, void *arg)
     io->breakout = TRUE;
 
     /** Create IOCP */
-    io->hCompletionPort = CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, 0, 0);
+    io->hCompletionPort = CreateIoCompletionPort(
+                              INVALID_HANDLE_VALUE, NULL, 0, 0);
 
     if (!io->hCompletionPort) {
         return LCB_EINTERNAL;
@@ -446,8 +460,7 @@ lcb_STATUS lcb_iocp_new_iops(int version, lcb_io_opt_t *ioret, void *arg)
 }
 
 LIBCOUCHBASE_API
-struct lcb_io_opt_st *lcb_create_iocp_io_opts(void)
-{
+struct lcb_io_opt_st *lcb_create_iocp_io_opts(void) {
     struct lcb_io_opt_st *ret;
     lcb_iocp_new_iops(0, &ret, NULL);
     return ret;

@@ -1,6 +1,6 @@
 /* -*- Mode: C; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2010-2019 Couchbase, Inc.
+ *     Copyright 2010-2012 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -143,6 +143,7 @@ void lcb_base64_encode_iov(lcb_IOV *iov, unsigned niov, unsigned nb, char **dst,
     char *ptr;
     lcb_SIZE io;
 
+
     for (io = 0; io < niov; io++) {
         nsrc += iov[io].iov_len;
     }
@@ -161,6 +162,7 @@ void lcb_base64_encode_iov(lcb_IOV *iov, unsigned niov, unsigned nb, char **dst,
 
         io = 0;
         iop = 0;
+
 
         for (ii = 0; ii < triplets; ii++) {
             int tt;
