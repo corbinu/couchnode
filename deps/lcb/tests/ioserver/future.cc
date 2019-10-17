@@ -6,7 +6,8 @@ Future::Future()
     failed = false;
 }
 
-void Future::wait()
+void
+Future::wait()
 {
     mutex.lock();
     while (!isDone() && !failed) {
@@ -21,12 +22,14 @@ Future::~Future()
     cond.close();
 }
 
-void Future::startUpdate()
+void
+Future::startUpdate()
 {
     mutex.lock();
 }
 
-void Future::endUpdate()
+void
+Future::endUpdate()
 {
     if (shouldEnd()) {
         cond.signal();
@@ -34,7 +37,8 @@ void Future::endUpdate()
     mutex.unlock();
 }
 
-bool Future::checkDone()
+bool
+Future::checkDone()
 {
     bool ret;
     if (!mutex.tryLock()) {

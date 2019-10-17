@@ -1,8 +1,6 @@
 #include "rdbtest.h"
 #include <rdb/bigalloc.h>
-class BigallocTest : public ::testing::Test
-{
-};
+class BigallocTest : public ::testing::Test {};
 
 TEST_F(BigallocTest, testBasic)
 {
@@ -38,7 +36,7 @@ TEST_F(BigallocTest, testTooSmall)
     a.free(newseg);
 
     size_t smallsize = RDB_BIGALLOC_ALLOCSZ_MIN / 2;
-    while (ba->n_requests < RDB_BIGALLOC_RECHECK_RATE - 1) {
+    while (ba->n_requests < RDB_BIGALLOC_RECHECK_RATE-1) {
         newseg = a.alloc(smallsize);
         a.free(newseg);
         ASSERT_EQ(seg, newseg); // same pooled one
@@ -51,8 +49,8 @@ TEST_F(BigallocTest, testTooSmall)
     size_t oldmin = ba->min_blk_alloc, oldmax = ba->max_blk_alloc;
     // Get one more:
     newseg = a.alloc(smallsize);
-    ASSERT_EQ(oldmin / 2, ba->min_blk_alloc);
-    ASSERT_EQ(oldmax / 2, ba->max_blk_alloc);
+    ASSERT_EQ(oldmin/2, ba->min_blk_alloc);
+    ASSERT_EQ(oldmax/2, ba->max_blk_alloc);
     a.free(newseg);
 
     rdb_bigalloc_dump(ba, stdout);
@@ -63,7 +61,7 @@ TEST_F(BigallocTest, testPooled)
 {
     RdbAllocator a(rdb_bigalloc_new());
     rdb_BIGALLOC *ba = (rdb_BIGALLOC *)a._inner;
-    std::vector< rdb_ROPESEG * > segs;
+    std::vector<rdb_ROPESEG *> segs;
     size_t allocsize = 1;
 
     for (unsigned ii = 0; ii < (ba->max_blk_count * 2); ii++) {
@@ -88,7 +86,7 @@ TEST_F(BigallocTest, testRealloc)
     rdb_ROPESEG *seg = a.alloc(5);
     // well, we'll see what we have here
     size_t cursize = seg->nalloc;
-    seg = a.realloc(seg, cursize + 1);
+    seg = a.realloc(seg, cursize+1);
     ASSERT_GT(seg->nalloc, cursize);
     a.free(seg);
     a.release();

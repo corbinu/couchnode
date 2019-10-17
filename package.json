@@ -5,7 +5,7 @@
     "yarn": "^1.9.3",
     "node": ">=8.9.0"
   },
-  "version": "3.0.1",
+  "version": "2.7.0",
   "keywords": [
     "couchbase",
     "libcouchbase",
@@ -18,11 +18,13 @@
   "license": "Apache-2.0",
   "name": "@corbinu/couchbase",
   "dependencies": {
-    "@types/node": "^12.6.1",
+    "@types/node": "^12.11.1",
     "bindings": "^1.5.0",
+    "debug": "^4.1.1",
     "nan": "^2.14.0",
-    "prebuild-install": "^5.3.0",
-    "qs": "^6.7.0",
+    "parse-duration": "^0.1.1",
+    "prebuild-install": "^5.3.2",
+    "qs": "^6.9.0",
     "request": "^2.88.0",
     "winston": "^3.2.1"
   },
@@ -30,9 +32,9 @@
   "devDependencies": {
     "chai": "^4.2.0",
     "jshint": "^2.10.2",
-    "mocha": "^6.1.4",
-    "prebuild": "^9.0.0",
-    "uuid": "^3.3.2"
+    "mocha": "^6.2.1",
+    "prebuild": "^9.1.1",
+    "uuid": "^3.3.3"
   },
   "repository": {
     "type": "git",

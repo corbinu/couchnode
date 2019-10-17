@@ -1,6 +1,6 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2016-2019 Couchbase, Inc.
+ *     Copyright 2016 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -27,13 +27,14 @@
 #include "internal.h"
 
 #define LOGFMT "(mgreq=%p) "
-#define LOGID(req) static_cast< const void * >(req)
+#define LOGID(req) static_cast<const void*>(req)
 #define LOGARGS(req, lvl) (req)->m_instance->settings, "ixmgmt", LCB_LOG_##lvl, __FILE__, __LINE__
 
-using std::string;
 using std::vector;
+using std::string;
 
-static const char *ixtype_2_str(unsigned ixtype)
+static const char *
+ixtype_2_str(unsigned ixtype)
 {
     if (ixtype == LCB_N1XSPEC_T_GSI) {
         return "gsi";
@@ -54,12 +55,12 @@ struct ErrorSpec {
     unsigned code;
 };
 
-template < typename T > void my_delete(T p)
-{
+template <typename T> void my_delete(T p) {
     delete p;
 }
 
-template < typename T > lcb_STATUS extract_n1ql_errors(const char *s, size_t n, T &err_out)
+template <typename T> lcb_error_t
+extract_n1ql_errors(const char *s, size_t n, T& err_out)
 {
     Json::Value jresp;
     if (!Json::Reader().parse(s, s + n, jresp)) {
@@ -69,7 +70,7 @@ template < typename T > lcb_STATUS extract_n1ql_errors(const char *s, size_t n, 
         return LCB_SUCCESS;
     }
 
-    Json::Value &errors = jresp["errors"];
+    Json::Value& errors = jresp["errors"];
     if (errors.isNull()) {
         return LCB_SUCCESS;
     } else if (!errors.isArray()) {
@@ -81,7 +82,7 @@ template < typename T > lcb_STATUS extract_n1ql_errors(const char *s, size_t n, 
     }
 
     for (Json::ArrayIndex ii = 0; ii < errors.size(); ++ii) {
-        const Json::Value &err = errors[ii];
+        const Json::Value& err = errors[ii];
         if (!err.isObject()) {
             continue; // expected an object!
         }
@@ -93,22 +94,24 @@ template < typename T > lcb_STATUS extract_n1ql_errors(const char *s, size_t n, 
     return LCB_ERROR;
 }
 
-static lcb_STATUS get_n1ql_error(const char *s, size_t n)
+static lcb_error_t
+get_n1ql_error(const char *s, size_t n)
 {
-    std::vector< ErrorSpec > dummy;
+    std::vector<ErrorSpec> dummy;
     return extract_n1ql_errors(s, n, dummy);
 }
 
 // Called for generic operations and establishes existence or lack thereof
-static void cb_generic(lcb_INSTANCE *instance, int, const lcb_RESPN1QL *resp)
+static void
+cb_generic(lcb_t instance, int, const lcb_RESPN1QL *resp)
 {
     // Get the real cookie..
     if (!(resp->rflags & LCB_RESP_F_FINAL)) {
         return;
     }
 
-    IndexOpCtx *ctx = reinterpret_cast< IndexOpCtx * >(resp->cookie);
-    lcb_RESPN1XMGMT w_resp = {0};
+    IndexOpCtx *ctx = reinterpret_cast<IndexOpCtx*>(resp->cookie);
+    lcb_RESPN1XMGMT w_resp = { 0 };
     w_resp.cookie = ctx->cookie;
 
     if ((w_resp.rc = resp->rc) == LCB_SUCCESS || resp->rc == LCB_HTTP_ERROR) {
@@ -116,12 +119,12 @@ static void cb_generic(lcb_INSTANCE *instance, int, const lcb_RESPN1QL *resp)
         // descend to determine additional errors. This is primarily
         // required to support EEXIST for GSI primary indexes
 
-        vector< ErrorSpec > errors;
-        lcb_STATUS rc = extract_n1ql_errors(resp->row, resp->nrow, errors);
+        vector<ErrorSpec> errors;
+        lcb_error_t rc = extract_n1ql_errors(resp->row, resp->nrow, errors);
         if (rc == LCB_ERROR) {
             w_resp.rc = LCB_QUERY_ERROR;
             for (size_t ii = 0; ii < errors.size(); ++ii) {
-                const std::string &msg = errors[ii].msg;
+                const std::string& msg = errors[ii].msg;
                 if (msg.find("already exist") != string::npos) {
                     w_resp.rc = LCB_KEY_EEXISTS; // Index entry already exists
                 } else if (msg.find("not found") != string::npos) {
@@ -154,15 +157,15 @@ static void cb_generic(lcb_INSTANCE *instance, int, const lcb_RESPN1QL *resp)
  *
  * See other overload for passing just the query string w/o extra parameters
  */
-template < typename T >
-lcb_STATUS dispatch_common(lcb_INSTANCE *instance, const void *cookie, lcb_N1XMGMTCALLBACK u_callback,
-                           lcb_N1QL_CALLBACK i_callback, const char *s, size_t n, T *obj)
+template <typename T> lcb_error_t
+dispatch_common(lcb_t instance,
+    const void *cookie, lcb_N1XMGMTCALLBACK u_callback,
+    lcb_N1QLCALLBACK i_callback, const char *s, size_t n, T *obj)
 {
-    lcb_STATUS rc = LCB_SUCCESS;
+    lcb_error_t rc = LCB_SUCCESS;
     bool our_alloc = false;
-    struct {
-        lcb_INSTANCE *m_instance;
-    } ixwrap = {instance}; // For logging
+    lcb_CMDN1QL cmd = { 0 };
+    struct { lcb_t m_instance; } ixwrap = { instance }; // For logging
 
     if (obj == NULL) {
         obj = new T();
@@ -174,55 +177,47 @@ lcb_STATUS dispatch_common(lcb_INSTANCE *instance, const void *cookie, lcb_N1XMG
         goto GT_ERROR;
     }
 
-    obj->cookie = const_cast< void * >(cookie);
+    obj->cookie = const_cast<void*>(cookie);
 
-    lcb_CMDN1QL *cmd;
-    lcb_cmdn1ql_create(&cmd);
-    lcb_cmdn1ql_query(cmd, s, n);
-    lcb_cmdn1ql_callback(cmd, i_callback);
+    cmd.query = s;
+    cmd.nquery = n;
+    cmd.callback = i_callback;
     lcb_log(LOGARGS(&ixwrap, DEBUG), LOGFMT "Issuing query %.*s", LOGID(obj), (int)n, s);
-    rc = lcb_n1ql(instance, obj, cmd);
-    lcb_cmdn1ql_destroy(cmd);
+    rc = lcb_n1ql_query(instance, obj, &cmd);
 
-GT_ERROR:
+    GT_ERROR:
     if (rc != LCB_SUCCESS && our_alloc) {
         delete obj;
     }
     return rc;
 }
 
-template < typename T >
-lcb_STATUS dispatch_common(lcb_INSTANCE *instance, const void *cookie, lcb_N1XMGMTCALLBACK u_callback,
-                           lcb_N1QL_CALLBACK i_callback, const string &ss, T *obj = NULL)
+template <typename T> lcb_error_t
+dispatch_common(lcb_t instance,
+    const void *cookie, lcb_N1XMGMTCALLBACK u_callback,
+    lcb_N1QLCALLBACK i_callback, const string& ss, T *obj = NULL)
 {
     Json::Value root;
     root["statement"] = ss;
     string reqbuf = Json::FastWriter().write(root);
-    return dispatch_common< T >(instance, cookie, u_callback, i_callback, reqbuf.c_str(), reqbuf.size() - 1 /*newline*/,
-                                obj);
+    return dispatch_common<T>(instance,
+        cookie, u_callback, i_callback,
+        reqbuf.c_str(), reqbuf.size()-1 /*newline*/, obj);
 }
+
 
 // Class to back the storage for the actual lcb_IXSPEC without doing too much
 // mind-numbing buffer copies. Maybe this can be done via a macro instead?
-class IndexSpec : public lcb_N1XSPEC
-{
-  public:
-    IndexSpec(const char *s, size_t n) : lcb_N1XSPEC()
-    {
+class IndexSpec : public lcb_N1XSPEC {
+public:
+    IndexSpec(const char *s, size_t n) : lcb_N1XSPEC() {
         load_json(s, n);
     }
     inline IndexSpec(const lcb_N1XSPEC *spec);
-    static inline void to_key(const lcb_N1XSPEC *spec, std::string &out);
-    bool is_primary() const
-    {
-        return flags & LCB_N1XSPEC_F_PRIMARY;
-    }
-    bool is_defer() const
-    {
-        return flags & LCB_N1XSPEC_F_DEFER;
-    }
-    void ensure_keyspace(lcb_INSTANCE *instance)
-    {
+    static inline void to_key(const lcb_N1XSPEC *spec, std::string& out);
+    bool is_primary() const { return flags & LCB_N1XSPEC_F_PRIMARY; }
+    bool is_defer() const { return flags & LCB_N1XSPEC_F_DEFER; }
+    void ensure_keyspace(lcb_t instance) {
         if (nkeyspace) {
             return;
         }
@@ -230,39 +225,39 @@ class IndexSpec : public lcb_N1XSPEC
         nkeyspace = strlen(keyspace);
     }
 
-  private:
+private:
     // Load fields from a JSON string
     inline void load_json(const char *s, size_t n);
 
     // Load all fields
-    inline size_t load_fields(const Json::Value &root, bool do_copy);
+    inline size_t load_fields(const Json::Value& root, bool do_copy);
 
-    size_t total_fields_size(const Json::Value &src)
-    {
+    size_t total_fields_size(const Json::Value& src) {
         return load_fields(src, false);
     }
 
     // Load field from a JSON object
-    inline size_t load_json_field(const Json::Value &root, const char *name, const char **tgt_ptr, size_t *tgt_len,
-                                  bool do_copy);
+    inline size_t load_json_field(
+        const Json::Value& root,
+        const char *name, const char **tgt_ptr, size_t *tgt_len, bool do_copy);
 
     // Load field from another pointer
-    void load_field(const char **dest, const char *src, size_t n)
-    {
+    void load_field(const char **dest, const char *src, size_t n) {
         m_buf.append(src, n);
         if (n) {
-            *dest = &m_buf.c_str()[m_buf.size() - n];
+            *dest = &m_buf.c_str()[m_buf.size()-n];
         } else {
             *dest = NULL;
         }
     }
 
     string m_buf;
-    IndexSpec(const IndexSpec &);
+    IndexSpec(const IndexSpec&);
 };
 
 LIBCOUCHBASE_API
-lcb_STATUS lcb_n1x_create(lcb_INSTANCE *instance, const void *cookie, const lcb_CMDN1XMGMT *cmd)
+lcb_error_t
+lcb_n1x_create(lcb_t instance, const void *cookie, const lcb_CMDN1XMGMT *cmd)
 {
     string ss;
     IndexSpec spec(&cmd->spec);
@@ -301,12 +296,12 @@ lcb_STATUS lcb_n1x_create(lcb_INSTANCE *instance, const void *cookie, const lcb_
             }
             for (size_t ii = 0; ii < fields_arr.size(); ++ii) {
                 static Json::Value empty;
-                const Json::Value &field = fields_arr.get(ii, empty);
+                const Json::Value& field = fields_arr.get(ii, empty);
                 if (!field.isString()) {
                     return LCB_EINVAL;
                 }
                 ss.append(field.asString());
-                if (ii != fields_arr.size() - 1) {
+                if (ii != fields_arr.size()-1) {
                     ss.append(",");
                 }
             }
@@ -341,36 +336,33 @@ lcb_STATUS lcb_n1x_create(lcb_INSTANCE *instance, const void *cookie, const lcb_
         ss.append(" WITH {\"defer_build\": true}");
     }
 
-    return dispatch_common< IndexOpCtx >(instance, cookie, cmd->callback, cb_generic, ss);
+    return dispatch_common<IndexOpCtx>(instance, cookie, cmd->callback, cb_generic, ss);
 }
 
-class ListIndexCtx : public IndexOpCtx
-{
-  public:
-    vector< IndexSpec * > specs;
 
-    virtual void invoke(lcb_INSTANCE *instance, lcb_RESPN1XMGMT *resp)
-    {
+class ListIndexCtx : public IndexOpCtx {
+public:
+    vector<IndexSpec*> specs;
+
+    virtual void invoke(lcb_t instance, lcb_RESPN1XMGMT *resp) {
         finish(instance, resp);
     }
 
-    void finish(lcb_INSTANCE *instance, lcb_RESPN1XMGMT *resp = NULL)
-    {
-        lcb_RESPN1XMGMT w_resp = {0};
+    void finish(lcb_t instance, lcb_RESPN1XMGMT *resp = NULL) {
+        lcb_RESPN1XMGMT w_resp = { 0 };
         if (resp == NULL) {
             resp = &w_resp;
             resp->rc = LCB_SUCCESS;
         }
         resp->cookie = cookie;
-        lcb_N1XSPEC **speclist = reinterpret_cast< lcb_N1XSPEC ** >(&specs[0]);
+        lcb_N1XSPEC **speclist = reinterpret_cast<lcb_N1XSPEC**>(&specs[0]);
         resp->specs = speclist;
         resp->nspecs = specs.size();
         callback(instance, LCB_CALLBACK_IXMGMT, resp);
         delete this;
     }
 
-    virtual ~ListIndexCtx()
-    {
+    virtual ~ListIndexCtx() {
         for (size_t ii = 0; ii < specs.size(); ++ii) {
             delete specs[ii];
         }
@@ -378,15 +370,16 @@ class ListIndexCtx : public IndexOpCtx
     }
 };
 
-static void cb_index_list(lcb_INSTANCE *instance, int, const lcb_RESPN1QL *resp)
+static void
+cb_index_list(lcb_t instance, int, const lcb_RESPN1QL *resp)
 {
-    ListIndexCtx *ctx = reinterpret_cast< ListIndexCtx * >(resp->cookie);
+    ListIndexCtx *ctx = reinterpret_cast<ListIndexCtx *>(resp->cookie);
     if (!(resp->rflags & LCB_RESP_F_FINAL)) {
         ctx->specs.push_back(new IndexSpec(resp->row, resp->nrow));
         return;
     }
 
-    lcb_RESPN1XMGMT w_resp = {0};
+    lcb_RESPN1XMGMT w_resp = { 0 };
     if ((w_resp.rc = resp->rc) == LCB_SUCCESS) {
         w_resp.rc = get_n1ql_error(resp->row, resp->nrow);
     }
@@ -394,8 +387,9 @@ static void cb_index_list(lcb_INSTANCE *instance, int, const lcb_RESPN1QL *resp)
     ctx->invoke(instance, &w_resp);
 }
 
-static lcb_STATUS do_index_list(lcb_INSTANCE *instance, const void *cookie, const lcb_CMDN1XMGMT *cmd,
-                                ListIndexCtx *ctx)
+static lcb_error_t
+do_index_list(lcb_t instance, const void *cookie, const lcb_CMDN1XMGMT *cmd,
+    ListIndexCtx *ctx)
 {
     string ss;
     IndexSpec spec(&cmd->spec);
@@ -425,17 +419,20 @@ static lcb_STATUS do_index_list(lcb_INSTANCE *instance, const void *cookie, cons
     ss.append(" true");
     ss.append(" ORDER BY is_primary DESC, name ASC");
 
-    return dispatch_common< ListIndexCtx >(instance, cookie, cmd->callback, cb_index_list, ss, ctx);
+    return dispatch_common<ListIndexCtx>(instance,
+        cookie, cmd->callback, cb_index_list, ss, ctx);
 }
 
 LIBCOUCHBASE_API
-lcb_STATUS lcb_n1x_list(lcb_INSTANCE *instance, const void *cookie, const lcb_CMDN1XMGMT *cmd)
+lcb_error_t
+lcb_n1x_list(lcb_t instance, const void *cookie, const lcb_CMDN1XMGMT *cmd)
 {
     return do_index_list(instance, cookie, cmd, NULL);
 }
 
 LIBCOUCHBASE_API
-lcb_STATUS lcb_n1x_drop(lcb_INSTANCE *instance, const void *cookie, const lcb_CMDN1XMGMT *cmd)
+lcb_error_t
+lcb_n1x_drop(lcb_t instance, const void *cookie, const lcb_CMDN1XMGMT *cmd)
 {
     string ss;
     IndexSpec spec(&cmd->spec);
@@ -460,22 +457,22 @@ lcb_STATUS lcb_n1x_drop(lcb_INSTANCE *instance, const void *cookie, const lcb_CM
         ss.append(" USING ").append(stype);
     }
 
-    return dispatch_common< IndexOpCtx >(instance, cookie, cmd->callback, cb_generic, ss);
+    return dispatch_common<IndexOpCtx>(instance, cookie, cmd->callback, cb_generic, ss);
 }
 
-class ListIndexCtx_BuildIndex : public ListIndexCtx
-{
-  public:
-    virtual inline void invoke(lcb_INSTANCE *instance, lcb_RESPN1XMGMT *resp);
-    inline lcb_STATUS try_build(lcb_INSTANCE *instance);
+class ListIndexCtx_BuildIndex : public ListIndexCtx {
+public:
+    virtual inline void invoke(lcb_t instance, lcb_RESPN1XMGMT *resp);
+    inline lcb_error_t try_build(lcb_t instance);
 };
 
-static void cb_build_submitted(lcb_INSTANCE *instance, int, const lcb_RESPN1QL *resp)
+static void
+cb_build_submitted(lcb_t instance, int, const lcb_RESPN1QL *resp)
 {
-    ListIndexCtx *ctx = reinterpret_cast< ListIndexCtx * >(resp->cookie);
+    ListIndexCtx *ctx = reinterpret_cast<ListIndexCtx*>(resp->cookie);
 
     if (resp->rflags & LCB_RESP_F_FINAL) {
-        lcb_RESPN1XMGMT w_resp = {0};
+        lcb_RESPN1XMGMT w_resp = { 0 };
         if ((w_resp.rc = resp->rc) == LCB_SUCCESS) {
             w_resp.rc = get_n1ql_error(resp->row, resp->nrow);
         }
@@ -483,12 +480,14 @@ static void cb_build_submitted(lcb_INSTANCE *instance, int, const lcb_RESPN1QL *
     }
 }
 
-lcb_STATUS ListIndexCtx_BuildIndex::try_build(lcb_INSTANCE *instance)
+lcb_error_t
+ListIndexCtx_BuildIndex::try_build(lcb_t instance)
 {
-    vector< IndexSpec * > pending;
+    vector<IndexSpec*> pending;
     for (size_t ii = 0; ii < specs.size(); ++ii) {
-        IndexSpec *spec = specs[ii];
-        if (strncmp(spec->state, "pending", spec->nstate) == 0 || strncmp(spec->state, "deferred", spec->nstate) == 0) {
+        IndexSpec* spec = specs[ii];
+        if (strncmp(spec->state, "pending", spec->nstate) == 0 ||
+                strncmp(spec->state, "deferred", spec->nstate) == 0) {
             pending.push_back(spec);
         }
     }
@@ -506,41 +505,45 @@ lcb_STATUS ListIndexCtx_BuildIndex::try_build(lcb_INSTANCE *instance)
         ss += '`';
         ss.append(pending[ii]->name, pending[ii]->nname);
         ss += '`';
-        if (ii + 1 < pending.size()) {
+        if (ii+1 < pending.size()) {
             ss += ',';
         }
     }
     ss += ')';
 
-    lcb_STATUS rc =
-        dispatch_common< ListIndexCtx_BuildIndex >(instance, cookie, callback, cb_build_submitted, ss, this);
+    lcb_error_t rc = dispatch_common<ListIndexCtx_BuildIndex>(
+        instance, cookie, callback, cb_build_submitted, ss,
+        this);
 
     if (rc == LCB_SUCCESS) {
-        std::set< IndexSpec * > to_remove(specs.begin(), specs.end());
+        std::set<IndexSpec*> to_remove(specs.begin(), specs.end());
         for (size_t ii = 0; ii < pending.size(); ++ii) {
             to_remove.erase(pending[ii]);
         }
 
-        std::for_each(to_remove.begin(), to_remove.end(), my_delete< IndexSpec * >);
+        std::for_each(to_remove.begin(), to_remove.end(), my_delete<IndexSpec*>);
 
         specs = pending;
     }
     return rc;
 }
 
-void ListIndexCtx_BuildIndex::invoke(lcb_INSTANCE *instance, lcb_RESPN1XMGMT *resp)
+void
+ListIndexCtx_BuildIndex::invoke(lcb_t instance, lcb_RESPN1XMGMT *resp)
 {
-    if (resp->rc == LCB_SUCCESS && (resp->rc = try_build(instance)) == LCB_SUCCESS) {
+    if (resp->rc == LCB_SUCCESS &&
+            (resp->rc = try_build(instance)) == LCB_SUCCESS) {
         return;
     }
     finish(instance, resp);
 }
 
 LIBCOUCHBASE_API
-lcb_STATUS lcb_n1x_startbuild(lcb_INSTANCE *instance, const void *cookie, const lcb_CMDN1XMGMT *cmd)
+lcb_error_t
+lcb_n1x_startbuild(lcb_t instance, const void *cookie, const lcb_CMDN1XMGMT *cmd)
 {
     ListIndexCtx_BuildIndex *ctx = new ListIndexCtx_BuildIndex();
-    lcb_STATUS rc = do_index_list(instance, cookie, cmd, ctx);
+    lcb_error_t rc = do_index_list(instance, cookie, cmd, ctx);
     if (rc != LCB_SUCCESS) {
         delete ctx;
     }
@@ -552,22 +555,23 @@ struct WatchIndexCtx : public IndexOpCtx {
     lcbio_pTIMER m_timer;
     uint32_t m_interval;
     uint64_t m_tsend;
-    lcb_INSTANCE *m_instance;
-    std::map< std::string, IndexSpec * > m_defspend;
-    std::vector< IndexSpec * > m_defsok;
+    lcb_t m_instance;
+    std::map<std::string,IndexSpec*> m_defspend;
+    std::vector<IndexSpec*> m_defsok;
 
     inline void read_state(const lcb_RESPN1XMGMT *resp);
     inline void reschedule();
-    inline lcb_STATUS do_poll();
-    inline lcb_STATUS load_defs(const lcb_CMDN1XWATCH *);
-    inline WatchIndexCtx(lcb_INSTANCE *, const void *, const lcb_CMDN1XWATCH *);
+    inline lcb_error_t do_poll();
+    inline lcb_error_t load_defs(const lcb_CMDN1XWATCH *);
+    inline WatchIndexCtx(lcb_t, const void *, const lcb_CMDN1XWATCH*);
     inline ~WatchIndexCtx();
-    inline void finish(lcb_STATUS rc, const lcb_RESPN1XMGMT *);
+    inline void finish(lcb_error_t rc, const lcb_RESPN1XMGMT *);
 };
 
-static void cb_watchix_tm(void *arg)
+static void
+cb_watchix_tm(void *arg)
 {
-    WatchIndexCtx *ctx = reinterpret_cast< WatchIndexCtx * >(arg);
+    WatchIndexCtx *ctx = reinterpret_cast<WatchIndexCtx*>(arg);
     uint64_t now = lcb_nstime();
     if (now >= ctx->m_tsend) {
         ctx->finish(LCB_ETIMEDOUT, NULL);
@@ -579,8 +583,8 @@ static void cb_watchix_tm(void *arg)
 #define DEFAULT_WATCH_TIMEOUT LCB_S2US(30)
 #define DEFAULT_WATCH_INTERVAL LCB_MS2US(500)
 
-WatchIndexCtx::WatchIndexCtx(lcb_INSTANCE *instance, const void *cookie_, const lcb_CMDN1XWATCH *cmd)
-    : m_instance(instance)
+WatchIndexCtx::WatchIndexCtx(lcb_t instance, const void *cookie_, const lcb_CMDN1XWATCH *cmd)
+: m_instance(instance)
 {
     uint64_t now = lcb_nstime();
     uint32_t timeout = cmd->timeout ? cmd->timeout : DEFAULT_WATCH_TIMEOUT;
@@ -589,7 +593,7 @@ WatchIndexCtx::WatchIndexCtx(lcb_INSTANCE *instance, const void *cookie_, const 
     m_tsend = now + LCB_US2NS(timeout);
 
     this->callback = cmd->callback;
-    this->cookie = const_cast< void * >(cookie_);
+    this->cookie = const_cast<void*>(cookie_);
 
     m_timer = lcbio_timer_new(instance->iotable, this, cb_watchix_tm);
     lcb_aspend_add(&instance->pendops, LCB_PENDTYPE_COUNTER, NULL);
@@ -605,13 +609,15 @@ WatchIndexCtx::~WatchIndexCtx()
         lcb_maybe_breakout(m_instance);
     }
 
-    std::for_each(m_defsok.begin(), m_defsok.end(), my_delete< IndexSpec * >);
-    for (std::map< string, IndexSpec * >::iterator ii = m_defspend.begin(); ii != m_defspend.end(); ++ii) {
+    std::for_each(m_defsok.begin(), m_defsok.end(), my_delete<IndexSpec*>);
+    for (std::map<string,IndexSpec*>::iterator ii = m_defspend.begin();
+            ii != m_defspend.end(); ++ii) {
         delete ii->second;
     }
 }
 
-void IndexSpec::to_key(const lcb_N1XSPEC *spec, std::string &s)
+void
+IndexSpec::to_key(const lcb_N1XSPEC* spec, std::string& s)
 {
     // Identity is:
     // {keyspace,name,is_primary,type}
@@ -625,7 +631,8 @@ void IndexSpec::to_key(const lcb_N1XSPEC *spec, std::string &s)
     s.append(type_s);
 }
 
-void WatchIndexCtx::read_state(const lcb_RESPN1XMGMT *resp)
+void
+WatchIndexCtx::read_state(const lcb_RESPN1XMGMT *resp)
 {
     // We examine the indexes here to see which ones have been completed
     // Make them all into an std::map
@@ -635,17 +642,17 @@ void WatchIndexCtx::read_state(const lcb_RESPN1XMGMT *resp)
         return;
     }
 
-    std::map< std::string, const lcb_N1XSPEC * > in_specs;
+    std::map<std::string, const lcb_N1XSPEC*> in_specs;
     for (size_t ii = 0; ii < resp->nspecs; ++ii) {
         std::string key;
         IndexSpec::to_key(resp->specs[ii], key);
         in_specs[key] = resp->specs[ii];
     }
 
-    std::map< std::string, IndexSpec * >::iterator it_remain = m_defspend.begin();
+    std::map<std::string, IndexSpec*>::iterator it_remain = m_defspend.begin();
     while (it_remain != m_defspend.end()) {
         // See if the index is 'online' yet!
-        std::map< std::string, const lcb_N1XSPEC * >::iterator res;
+        std::map<std::string,const lcb_N1XSPEC*>::iterator res;
         res = in_specs.find(it_remain->first);
         if (res == in_specs.end()) {
             lcb_log(LOGARGS(this, INFO), LOGFMT "Index [%s] not in cluster", LOGID(this), it_remain->first.c_str());
@@ -671,7 +678,8 @@ void WatchIndexCtx::read_state(const lcb_RESPN1XMGMT *resp)
     }
 }
 
-lcb_STATUS WatchIndexCtx::load_defs(const lcb_CMDN1XWATCH *cmd)
+lcb_error_t
+WatchIndexCtx::load_defs(const lcb_CMDN1XWATCH *cmd)
 {
     for (size_t ii = 0; ii < cmd->nspec; ++ii) {
         std::string key;
@@ -685,9 +693,10 @@ lcb_STATUS WatchIndexCtx::load_defs(const lcb_CMDN1XWATCH *cmd)
     return LCB_SUCCESS;
 }
 
-void WatchIndexCtx::finish(lcb_STATUS rc, const lcb_RESPN1XMGMT *resp)
+void
+WatchIndexCtx::finish(lcb_error_t rc, const lcb_RESPN1XMGMT *resp)
 {
-    lcb_RESPN1XMGMT my_resp = {0};
+    lcb_RESPN1XMGMT my_resp = { 0 };
     my_resp.cookie = cookie;
     my_resp.rc = rc;
 
@@ -695,14 +704,15 @@ void WatchIndexCtx::finish(lcb_STATUS rc, const lcb_RESPN1XMGMT *resp)
         my_resp.inner = resp->inner;
     }
 
-    lcb_N1XSPEC **speclist = reinterpret_cast< lcb_N1XSPEC ** >(&m_defsok[0]);
+    lcb_N1XSPEC **speclist = reinterpret_cast<lcb_N1XSPEC**>(&m_defsok[0]);
     my_resp.specs = speclist;
     my_resp.nspecs = m_defsok.size();
     callback(m_instance, LCB_CALLBACK_IXMGMT, &my_resp);
     delete this;
 }
 
-void WatchIndexCtx::reschedule()
+void
+WatchIndexCtx::reschedule()
 {
     // Next interval!
     uint64_t now = lcb_nstime();
@@ -713,27 +723,30 @@ void WatchIndexCtx::reschedule()
     }
 }
 
-static void cb_watch_gotlist(lcb_INSTANCE *, int, const lcb_RESPN1XMGMT *resp)
+static void
+cb_watch_gotlist(lcb_t, int, const lcb_RESPN1XMGMT *resp)
 {
-    WatchIndexCtx *ctx = reinterpret_cast< WatchIndexCtx * >(resp->cookie);
+    WatchIndexCtx *ctx = reinterpret_cast<WatchIndexCtx*>(resp->cookie);
     ctx->read_state(resp);
 }
 
-lcb_STATUS WatchIndexCtx::do_poll()
+lcb_error_t
+WatchIndexCtx::do_poll()
 {
     lcb_CMDN1XMGMT cmd;
     memset(&cmd, 0, sizeof cmd);
     cmd.callback = cb_watch_gotlist;
-    lcb_log(LOGARGS(this, DEBUG), LOGFMT "Will check for index readiness of %lu indexes. %lu completed", LOGID(this),
-            (unsigned long int)m_defspend.size(), (unsigned long int)m_defsok.size());
+    lcb_log(LOGARGS(this, DEBUG), LOGFMT "Will check for index readiness of %lu indexes. %lu completed",
+            LOGID(this), (unsigned long int)m_defspend.size(), (unsigned long int)m_defsok.size());
     return lcb_n1x_list(m_instance, this, &cmd);
 }
 
 LIBCOUCHBASE_API
-lcb_STATUS lcb_n1x_watchbuild(lcb_INSTANCE *instance, const void *cookie, const lcb_CMDN1XWATCH *cmd)
+lcb_error_t
+lcb_n1x_watchbuild(lcb_t instance, const void *cookie, const lcb_CMDN1XWATCH *cmd)
 {
     WatchIndexCtx *ctx = new WatchIndexCtx(instance, cookie, cmd);
-    lcb_STATUS rc;
+    lcb_error_t rc;
     if ((rc = ctx->load_defs(cmd)) != LCB_SUCCESS) {
         delete ctx;
         return rc;
@@ -745,8 +758,8 @@ lcb_STATUS lcb_n1x_watchbuild(lcb_INSTANCE *instance, const void *cookie, const 
     return LCB_SUCCESS;
 }
 
-void IndexSpec::load_json(const char *s, size_t n)
-{
+void
+IndexSpec::load_json(const char *s, size_t n) {
     Json::Value root;
     // Set the JSON first!
     m_buf.assign(s, n);
@@ -779,7 +792,7 @@ void IndexSpec::load_json(const char *s, size_t n)
 // IndexSpec stuff
 IndexSpec::IndexSpec(const lcb_N1XSPEC *spec)
 {
-    *static_cast< lcb_N1XSPEC * >(this) = *spec;
+    *static_cast<lcb_N1XSPEC*>(this) = *spec;
     if (spec->nrawjson) {
         load_json(spec->rawjson, spec->nrawjson);
         return;
@@ -795,7 +808,8 @@ IndexSpec::IndexSpec(const lcb_N1XSPEC *spec)
     load_field(&cond, spec->cond, ncond);
 }
 
-size_t IndexSpec::load_fields(const Json::Value &root, bool do_copy)
+size_t
+IndexSpec::load_fields(const Json::Value& root, bool do_copy)
 {
     size_t size = 0;
     size += load_json_field(root, "name", &name, &nname, do_copy);
@@ -807,8 +821,9 @@ size_t IndexSpec::load_fields(const Json::Value &root, bool do_copy)
     return size;
 }
 
-size_t IndexSpec::load_json_field(const Json::Value &root, const char *name_, const char **tgt_ptr, size_t *tgt_len,
-                                  bool do_copy)
+size_t
+IndexSpec::load_json_field(const Json::Value& root,
+    const char *name_, const char **tgt_ptr, size_t *tgt_len, bool do_copy)
 {
     size_t namelen = strlen(name_);
     const Json::Value *val = root.find(name_, name_ + namelen);
@@ -832,7 +847,7 @@ size_t IndexSpec::load_json_field(const Json::Value &root, const char *name_, co
     }
 
     if (n) {
-        *tgt_ptr = &(m_buf.c_str()[m_buf.size() - n]);
+        *tgt_ptr = &(m_buf.c_str()[m_buf.size()-n]);
         *tgt_len = n;
     } else {
         *tgt_ptr = NULL;

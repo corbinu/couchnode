@@ -1,6 +1,5 @@
-/* -*- Mode: C; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2015-2019 Couchbase, Inc.
+ *     Copyright 2015 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -15,9 +14,13 @@
  *   limitations under the License.
  */
 
+#define LCB_NO_DEPR_CXX_CTORS
+
 #include "config.h"
 #include <sys/types.h>
 #include <libcouchbase/couchbase.h>
+#include <libcouchbase/api3.h>
+#include <libcouchbase/n1ql.h>
 #include <libcouchbase/vbucket.h>
 #include <iostream>
 #include <list>
@@ -38,10 +41,10 @@
 
 using namespace cbc;
 using namespace cliopts;
+using std::vector;
+using std::string;
 using std::cerr;
 using std::endl;
-using std::string;
-using std::vector;
 
 #ifndef _WIN32
 static bool use_ansi_codes = true;
@@ -49,74 +52,48 @@ static bool use_ansi_codes = true;
 static bool use_ansi_codes = false;
 #endif
 
-static void do_or_die(lcb_STATUS rc)
+static void do_or_die(lcb_error_t rc)
 {
     if (rc != LCB_SUCCESS) {
-        throw std::runtime_error(lcb_strerror_long(rc));
+        std::stringstream ss;
+        ss << "[" << std::hex << rc << "] " << lcb_strerror(NULL, rc);
+        throw std::runtime_error(ss.str());
     }
 }
 
-class Metrics
-{
-  public:
-    Metrics() : n_rows(0), n_queries(0), n_errors(0), last_update(time(NULL)), hg(NULL)
+class Metrics {
+public:
+    Metrics()
+    : n_rows(0), n_queries(0), n_errors(0), last_update(time(NULL)), hg(NULL)
     {
-#ifndef _WIN32
+        #ifndef _WIN32
         if (pthread_mutex_init(&m_lock, NULL) != 0) {
             abort();
         }
-#endif
+        #endif
         start_time = last_update;
     }
 
-    size_t nerrors()
-    {
-        return n_errors;
-    }
+    size_t nerrors() { return n_errors; }
 
-    void update_row(size_t n = 1)
-    {
-        n_rows += n;
-        update_display();
-    }
-    void update_done(size_t n = 1)
-    {
-        n_queries += n;
-        update_display();
-    }
-    void update_error(size_t n = 1)
-    {
-        n_errors += n;
-        update_display();
-    }
+    void update_row(size_t n = 1) { n_rows += n; update_display(); }
+    void update_done(size_t n = 1) { n_queries += n; update_display(); }
+    void update_error(size_t n = 1) { n_errors += n; update_display(); }
 
-    void update_timings(lcb_U64 duration)
-    {
+    void update_timings(lcb_U64 duration) {
         if (hg != NULL) {
             hg->record(duration);
         }
     }
 
 #ifndef _WIN32
-    bool is_tty() const
-    {
-        return isatty(STDOUT_FILENO);
-    }
-    void lock()
-    {
-        pthread_mutex_lock(&m_lock);
-    }
-    void unlock()
-    {
-        pthread_mutex_unlock(&m_lock);
-    }
+    bool is_tty() const { return isatty(STDOUT_FILENO); }
+    void lock() { pthread_mutex_lock(&m_lock); }
+    void unlock() { pthread_mutex_unlock(&m_lock); }
 #else
-    void lock() {}
-    void unlock() {}
-    bool is_tty() const
-    {
-        return false;
-    }
+    void lock(){}
+    void unlock(){}
+    bool is_tty() const { return false; }
 #endif
     void prepare_screen()
     {
@@ -133,7 +110,7 @@ class Metrics
         }
     }
 
-  private:
+private:
     void update_display()
     {
         time_t now = time(NULL);
@@ -192,31 +169,31 @@ Metrics GlobalMetrics;
 
 class Configuration
 {
-  public:
-    Configuration() : o_file("queryfile"), o_threads("num-threads"), o_errlog("error-log"), m_errlog(NULL)
-    {
+public:
+    Configuration() : o_file("queryfile"), o_threads("num-threads"), o_errlog("error-log"), m_errlog(NULL) {
         o_file.mandatory(true);
-        o_file.description("Path to a file containing all the queries to execute. "
-                           "Each line should contain the full query body");
+        o_file.description(
+            "Path to a file containing all the queries to execute. "
+            "Each line should contain the full query body");
         o_file.abbrev('f');
 
         o_threads.description("Number of threads to run");
         o_threads.abbrev('t');
         o_threads.setDefault(1);
 
-        o_errlog.description("Path to a file containing failed queries");
+        o_errlog.description(
+            "Path to a file containing failed queries");
         o_errlog.abbrev('e');
         o_errlog.setDefault("");
     }
 
-    ~Configuration()
-    {
+    ~Configuration() {
         if (m_errlog != NULL) {
             delete m_errlog;
             m_errlog = NULL;
         }
     }
-    void addToParser(Parser &parser)
+    void addToParser(Parser& parser)
     {
         parser.addOption(o_file);
         parser.addOption(o_threads);
@@ -260,25 +237,13 @@ class Configuration
         }
     }
 
-    void set_cropts(lcb_create_st &opts)
-    {
-        m_params.fillCropts(opts);
-    }
-    const vector< string > &queries() const
-    {
-        return m_queries;
-    }
-    size_t nthreads()
-    {
-        return o_threads.result();
-    }
-    std::ofstream *errlog()
-    {
-        return m_errlog;
-    }
+    void set_cropts(lcb_create_st &opts) { m_params.fillCropts(opts); }
+    const vector<string>& queries() const { return m_queries; }
+    size_t nthreads() { return o_threads.result(); }
+    std::ofstream* errlog() { return m_errlog; }
 
-  private:
-    vector< string > m_queries;
+private:
+    vector<string> m_queries;
     StringOption o_file;
     UIntOption o_threads;
     ConnParams m_params;
@@ -286,29 +251,25 @@ class Configuration
     std::ofstream *m_errlog;
 };
 
-extern "C" {
-static void n1qlcb(lcb_INSTANCE *, int, const lcb_RESPN1QL *resp);
-}
-extern "C" {
-static void *pthrfunc(void *);
-}
+extern "C" { static void n1qlcb(lcb_t, int, const lcb_RESPN1QL *resp); }
+extern "C" { static void* pthrfunc(void*); }
 
 class ThreadContext;
 struct QueryContext {
     lcb_U64 begin;
-    bool received;      // whether any row was received
+    bool received; // whether any row was received
     ThreadContext *ctx; // Parent
 
-    QueryContext(ThreadContext *tctx) : begin(lcb_nstime()), received(false), ctx(tctx) {}
+    QueryContext(ThreadContext *tctx)
+    : begin(lcb_nstime()), received(false), ctx(tctx) {}
 };
 
-class ThreadContext
-{
-  public:
+class ThreadContext {
+public:
     void run()
     {
         while (!m_cancelled) {
-            vector< string >::const_iterator ii = m_queries.begin();
+            vector<string>::const_iterator ii = m_queries.begin();
             for (; ii != m_queries.end(); ++ii) {
                 run_one_query(*ii);
             }
@@ -342,10 +303,7 @@ class ThreadContext
         }
     }
 #else
-    void start()
-    {
-        run();
-    }
+    void start() { run(); }
     void join() {}
 #endif
 
@@ -360,22 +318,16 @@ class ThreadContext
             ctx->received = true;
         }
 
-        if (lcb_respn1ql_is_final(resp)) {
-            lcb_STATUS rc = lcb_respn1ql_status(resp);
-            if (rc != LCB_SUCCESS) {
+        if (resp->rflags & LCB_RESP_F_FINAL) {
+            if (resp->rc != LCB_SUCCESS) {
                 if (m_errlog != NULL) {
-                    const char *p;
-                    size_t n;
-
-                    lcb_cmdn1ql_payload(m_cmd, &p, &n);
                     std::stringstream ss;
-                    ss.write(p, n);
+                    ss.write(m_cmd.query, m_cmd.nquery);
                     ss << endl;
-                    lcb_respn1ql_row(resp, &p, &n);
-                    ss.write(p, n);
-                    log_error(rc, ss.str().c_str(), ss.str().size());
+                    ss.write(resp->row, resp->nrow);
+                    log_error(resp->rc, ss.str().c_str(), ss.str().size());
                 } else {
-                    log_error(rc, NULL, 0);
+                    log_error(resp->rc, NULL, 0);
                 }
             }
         } else {
@@ -383,20 +335,23 @@ class ThreadContext
         }
     }
 
-    ThreadContext(lcb_INSTANCE *instance, const vector< string > &initial_queries, std::ofstream *errlog)
-        : m_instance(instance), last_nerr(0), last_nrow(0), m_metrics(&GlobalMetrics), m_cancelled(false), m_thr(NULL),
-          m_errlog(errlog)
+    ThreadContext(lcb_t instance, const vector<string>& initial_queries, std::ofstream *errlog)
+    : m_instance(instance), last_nerr(0), last_nrow(0),
+      m_metrics(&GlobalMetrics), m_cancelled(false), m_thr(NULL),
+      m_errlog(errlog)
     {
-        lcb_cmdn1ql_reset(m_cmd);
-        lcb_cmdn1ql_callback(m_cmd, n1qlcb);
+        memset(&m_cmd, 0, sizeof m_cmd);
+        m_cmd.content_type = "application/json";
+        m_cmd.callback = n1qlcb;
 
         // Shuffle the list
         m_queries = initial_queries;
         std::random_shuffle(m_queries.begin(), m_queries.end());
     }
 
-  private:
-    void log_error(lcb_STATUS err, const char *info, size_t ninfo)
+private:
+
+    void log_error(lcb_error_t err, const char* info, size_t ninfo)
     {
         size_t erridx;
         m_metrics->lock();
@@ -406,7 +361,8 @@ class ThreadContext
 
         if (m_errlog != NULL) {
             std::stringstream ss;
-            ss << "[" << erridx << "] " << lcb_strerror_short(err) << endl;
+            ss << "[" << erridx << "] 0x" << std::hex << err << ", "
+               << lcb_strerror(NULL, err) << endl;
             if (ninfo) {
                 ss.write(info, ninfo);
                 ss << endl;
@@ -416,18 +372,19 @@ class ThreadContext
         }
     }
 
-    void run_one_query(const string &txt)
+    void run_one_query(const string& txt)
     {
         // Reset counters
         last_nrow = 0;
         last_nerr = 0;
 
-        lcb_cmdn1ql_query(m_cmd, txt.c_str(), txt.size());
+        m_cmd.query = txt.c_str();
+        m_cmd.nquery = txt.size();
 
         // Set up our context
         QueryContext qctx(this);
 
-        lcb_STATUS rc = lcb_n1ql(m_instance, &qctx, m_cmd);
+        lcb_error_t rc = lcb_n1ql_query(m_instance, &qctx, &m_cmd);
         if (rc != LCB_SUCCESS) {
             log_error(rc, txt.c_str(), txt.size());
         } else {
@@ -439,36 +396,35 @@ class ThreadContext
         }
     }
 
-    lcb_INSTANCE *m_instance;
-    vector< string > m_queries;
+    lcb_t m_instance;
+    vector<string> m_queries;
     size_t last_nerr;
     size_t last_nrow;
-    lcb_CMDN1QL *m_cmd;
+    lcb_CMDN1QL m_cmd;
     Metrics *m_metrics;
     volatile bool m_cancelled;
-#ifndef _WIN32
+    #ifndef _WIN32
     pthread_t *m_thr;
-#else
+    #else
     void *m_thr;
-#endif
+    #endif
     std::ofstream *m_errlog;
 };
 
-static void n1qlcb(lcb_INSTANCE *, int, const lcb_RESPN1QL *resp)
+static void n1qlcb(lcb_t, int, const lcb_RESPN1QL *resp)
 {
-    QueryContext *qctx;
-    lcb_respn1ql_cookie(resp, (void **)&qctx);
+    QueryContext *qctx = reinterpret_cast<QueryContext*>(resp->cookie);
     qctx->ctx->handle_response(resp, qctx);
 }
 
-static void *pthrfunc(void *arg)
+static void* pthrfunc(void *arg)
 {
-    reinterpret_cast< ThreadContext * >(arg)->run();
+    reinterpret_cast<ThreadContext*>(arg)->run();
     return NULL;
 }
 
-static bool instance_has_n1ql(lcb_INSTANCE *instance)
-{
+static bool
+instance_has_n1ql(lcb_t instance) {
     // Check that the instance supports N1QL
     lcbvb_CONFIG *vbc;
     do_or_die(lcb_cntl(instance, LCB_CNTL_GET, LCB_CNTL_VBCONFIG, &vbc));
@@ -486,22 +442,21 @@ static bool instance_has_n1ql(lcb_INSTANCE *instance)
     return hix > -1;
 }
 
-static void real_main(int argc, char **argv)
-{
+static void real_main(int argc, char **argv) {
     Configuration config;
     Parser parser;
     config.addToParser(parser);
     parser.parse(argc, argv);
 
-    vector< ThreadContext * > threads;
-    vector< lcb_INSTANCE * > instances;
+    vector<ThreadContext*> threads;
+    vector<lcb_t> instances;
 
-    lcb_create_st cropts = {0};
+    lcb_create_st cropts = { 0 };
     config.set_cropts(cropts);
     config.processOptions();
 
     for (size_t ii = 0; ii < config.nthreads(); ii++) {
-        lcb_INSTANCE *instance;
+        lcb_t instance;
         do_or_die(lcb_create(&instance, &cropts));
         do_or_die(lcb_connect(instance));
         lcb_wait(instance);
@@ -511,7 +466,7 @@ static void real_main(int argc, char **argv)
             throw std::runtime_error("Cluster does not support N1QL!");
         }
 
-        ThreadContext *cx = new ThreadContext(instance, config.queries(), config.errlog());
+        ThreadContext* cx = new ThreadContext(instance, config.queries(), config.errlog());
         threads.push_back(cx);
         instances.push_back(instance);
     }
@@ -534,7 +489,7 @@ int main(int argc, char **argv)
     try {
         real_main(argc, argv);
         return 0;
-    } catch (std::exception &exc) {
+    } catch (std::exception& exc) {
         cerr << exc.what() << endl;
         exit(EXIT_FAILURE);
     }

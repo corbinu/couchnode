@@ -1,6 +1,6 @@
 /* -*- Mode: C; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2012-2019 Couchbase, Inc.
+ *     Copyright 2012 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -26,6 +26,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <libcouchbase/couchbase.h>
+#include <libcouchbase/api3.h>
 #include <event2/event.h>
 
 const char key[] = "foo";
@@ -39,9 +40,9 @@ int nresp = 1;
 int interval = 0;
 struct event *timer = NULL;
 
-static void bootstrap_callback(lcb_INSTANCE *instance, lcb_STATUS err)
+static void bootstrap_callback(lcb_t instance, lcb_error_t err)
 {
-    lcb_CMDSTORE *cmd;
+    lcb_CMDSTORE cmd = {0};
     if (err != LCB_SUCCESS) {
         fprintf(stderr, "ERROR: %s\n", lcb_strerror(instance, err));
         exit(EXIT_FAILURE);
@@ -49,30 +50,25 @@ static void bootstrap_callback(lcb_INSTANCE *instance, lcb_STATUS err)
     printf("successfully bootstrapped\n");
     fflush(stdout);
     /* Since we've got our configuration, let's go ahead and store a value */
-    lcb_cmdstore_create(&cmd, LCB_STORE_SET);
-    lcb_cmdstore_key(cmd, key, nkey);
-    lcb_cmdstore_value(cmd, val, nval);
-    err = lcb_store(instance, NULL, cmd);
-    lcb_cmdstore_destroy(cmd);
+    LCB_CMD_SET_KEY(&cmd, key, nkey);
+    LCB_CMD_SET_VALUE(&cmd, val, nval);
+    cmd.operation = LCB_SET;
+    err = lcb_store3(instance, NULL, &cmd);
     if (err != LCB_SUCCESS) {
         fprintf(stderr, "Failed to set up store request: %s\n", lcb_strerror(instance, err));
         exit(EXIT_FAILURE);
     }
 }
 
-static void get_callback(lcb_INSTANCE *instance, int cbtype, const lcb_RESPGET *rg)
+static void get_callback(lcb_t instance, int cbtype, const lcb_RESPBASE *rb)
 {
-    const char *value;
-    size_t nvalue;
-    lcb_STATUS rc = lcb_respget_status(rg);
-
-    if (rc != LCB_SUCCESS) {
-        fprintf(stderr, "Failed to get key: %s\n", lcb_strerror(instance, rc));
+    const lcb_RESPGET *rg = (const lcb_RESPGET *)rb;
+    if (rg->rc != LCB_SUCCESS) {
+        fprintf(stderr, "Failed to get key: %s\n", lcb_strerror(instance, rg->rc));
         exit(EXIT_FAILURE);
     }
 
-    lcb_respget_value(rg, &value, &nvalue);
-    printf("%d. retrieved the key 'foo', value: %.*s\n", nresp, (int)nvalue, value);
+    printf("%d. retrieved the key 'foo', value: %.*s\n", nresp, (int)rg->nvalue, rg->value);
     fflush(stdout);
     nresp--;
     if (nresp == 0) {
@@ -86,14 +82,12 @@ static void schedule_timer();
 
 static void timer_callback(int fd, short event, void *arg)
 {
-    lcb_INSTANCE *instance = arg;
-    lcb_STATUS rc;
-    lcb_CMDGET *gcmd;
+    lcb_t instance = arg;
+    lcb_error_t rc;
+    lcb_CMDGET gcmd = {0};
 
-    lcb_cmdget_create(&gcmd);
-    lcb_cmdget_key(gcmd, key, nkey);
-    rc = lcb_get(instance, NULL, gcmd);
-    lcb_cmdget_destroy(gcmd);
+    LCB_CMD_SET_KEY(&gcmd, key, nkey);
+    rc = lcb_get3(instance, NULL, &gcmd);
     if (rc != LCB_SUCCESS) {
         fprintf(stderr, "Failed to schedule get request: %s\n", lcb_strerror(NULL, rc));
         exit(EXIT_FAILURE);
@@ -116,11 +110,10 @@ static void schedule_timer()
     nreq--;
 }
 
-static void store_callback(lcb_INSTANCE *instance, int cbtype, const lcb_RESPSTORE *resp)
+static void store_callback(lcb_t instance, int cbtype, const lcb_RESPBASE *rb)
 {
-    lcb_STATUS rc = lcb_respstore_status(resp);
-    if (rc != LCB_SUCCESS) {
-        fprintf(stderr, "Failed to store key: %s\n", lcb_strerror(instance, rc));
+    if (rb->rc != LCB_SUCCESS) {
+        fprintf(stderr, "Failed to store key: %s\n", lcb_strerror(instance, rb->rc));
         exit(EXIT_FAILURE);
     }
     printf("stored key 'foo'\n");
@@ -140,7 +133,7 @@ static lcb_io_opt_t create_libevent_io_ops(struct event_base *evbase)
 {
     struct lcb_create_io_ops_st ciops;
     lcb_io_opt_t ioops;
-    lcb_STATUS error;
+    lcb_error_t error;
 
     memset(&ciops, 0, sizeof(ciops));
     ciops.v.v0.type = LCB_IO_OPS_LIBEVENT;
@@ -155,10 +148,10 @@ static lcb_io_opt_t create_libevent_io_ops(struct event_base *evbase)
     return ioops;
 }
 
-static lcb_INSTANCE *create_libcouchbase_handle(lcb_io_opt_t ioops, int argc, char **argv)
+static lcb_t create_libcouchbase_handle(lcb_io_opt_t ioops, int argc, char **argv)
 {
-    lcb_INSTANCE *instance;
-    lcb_STATUS error;
+    lcb_t instance;
+    lcb_error_t error;
     struct lcb_create_st copts;
 
     memset(&copts, 0, sizeof(copts));
@@ -184,8 +177,8 @@ static lcb_INSTANCE *create_libcouchbase_handle(lcb_io_opt_t ioops, int argc, ch
 
     /* Set up the callbacks */
     lcb_set_bootstrap_callback(instance, bootstrap_callback);
-    lcb_install_callback3(instance, LCB_CALLBACK_GET, (lcb_RESPCALLBACK)get_callback);
-    lcb_install_callback3(instance, LCB_CALLBACK_STORE, (lcb_RESPCALLBACK)store_callback);
+    lcb_install_callback3(instance, LCB_CALLBACK_GET, get_callback);
+    lcb_install_callback3(instance, LCB_CALLBACK_STORE, store_callback);
 
     if ((error = lcb_connect(instance)) != LCB_SUCCESS) {
         fprintf(stderr, "Failed to connect libcouchbase instance: %s\n", lcb_strerror(NULL, error));
@@ -202,7 +195,7 @@ int main(int argc, char **argv)
 {
     struct event_base *evbase = event_base_new();
     lcb_io_opt_t ioops = create_libevent_io_ops(evbase);
-    lcb_INSTANCE *instance = create_libcouchbase_handle(ioops, argc, argv);
+    lcb_t instance = create_libcouchbase_handle(ioops, argc, argv);
 
     if (argc > 4) {
         nreq = nresp = atoi(argv[4]);

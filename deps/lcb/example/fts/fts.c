@@ -1,6 +1,6 @@
 /* -*- Mode: C; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2018-2019 Couchbase, Inc.
+ *     Copyright 2018 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -41,6 +41,7 @@
 #include <string.h>
 
 #include <libcouchbase/couchbase.h>
+#include <libcouchbase/cbft.h>
 
 #include "queries.h"
 
@@ -50,7 +51,7 @@ static void fail(const char *msg)
     exit(EXIT_FAILURE);
 }
 
-static void check(lcb_STATUS err, const char *msg)
+static void check(lcb_error_t err, const char *msg)
 {
     if (err != LCB_SUCCESS) {
         char buf[1024] = {0};
@@ -59,7 +60,7 @@ static void check(lcb_STATUS err, const char *msg)
     }
 }
 
-static int err2color(lcb_STATUS err)
+static int err2color(lcb_error_t err)
 {
     switch (err) {
         case LCB_SUCCESS:
@@ -80,26 +81,22 @@ static void ln2space(const void *buf, size_t nbuf)
     }
 }
 
-static void row_callback(lcb_INSTANCE *instance, int type, const lcb_RESPFTS *resp)
+static void row_callback(lcb_t instance, int type, const lcb_RESPFTS *resp)
 {
-    const char *row;
-    size_t nrow;
-    lcb_respfts_row(resp, &row, &nrow);
-    ln2space(row, nrow);
-    lcb_STATUS rc = lcb_respfts_status(resp);
-    if (rc != LCB_SUCCESS) {
-        printf("\x1b[31m%s\x1b[0m: ", lcb_strerror_short(rc));
+    ln2space(resp->row, resp->nrow);
+    if (resp->rc != LCB_SUCCESS) {
+        printf("\x1b[31m%s\x1b[0m: ", lcb_strerror_short(resp->rc));
     }
-    printf("%.*s\n", (int)nrow, row);
-    if (lcb_respfts_is_final(resp)) {
+    printf("%.*s\n", (int)resp->nrow, (char *)resp->row);
+    if (resp->rflags & LCB_RESP_F_FINAL) {
         printf("\n");
     }
 }
 
 int main(int argc, char *argv[])
 {
-    lcb_STATUS err;
-    lcb_INSTANCE *instance;
+    lcb_error_t err;
+    lcb_t instance;
     char *bucket = NULL;
     size_t ii;
 
@@ -129,12 +126,11 @@ int main(int argc, char *argv[])
     }
 
     for (ii = 0; ii < num_queries; ii++) {
-        lcb_CMDFTS *cmd;
-        lcb_cmdfts_create(&cmd);
-        lcb_cmdfts_callback(cmd, row_callback);
-        lcb_cmdfts_query(cmd, queries[ii].query, queries[ii].query_len);
-        check(lcb_fts(instance, NULL, cmd), "schedule FTS index creation operation");
-        lcb_cmdfts_destroy(cmd);
+        lcb_CMDFTS cmd = {0};
+        cmd.callback = row_callback;
+        cmd.query = queries[ii].query;
+        cmd.nquery = queries[ii].query_len;
+        check(lcb_fts_query(instance, NULL, &cmd), "schedule FTS index creation operation");
         printf("----> \x1b[1m%s\x1b[0m\n", queries[ii].comment);
         printf("----> \x1b[32m%.*s\x1b[0m\n", (int)queries[ii].query_len, queries[ii].query);
         lcb_wait(instance);

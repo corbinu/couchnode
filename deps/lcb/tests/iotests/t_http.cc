@@ -1,19 +1,4 @@
 /* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
-/*
- *     Copyright 2011-2019 Couchbase, Inc.
- *
- *   Licensed under the Apache License, Version 2.0 (the "License");
- *   you may not use this file except in compliance with the License.
- *   You may obtain a copy of the License at
- *
- *       http://www.apache.org/licenses/LICENSE-2.0
- *
- *   Unless required by applicable law or agreed to in writing, software
- *   distributed under the License is distributed on an "AS IS" BASIS,
- *   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *   See the License for the specific language governing permissions and
- *   limitations under the License.
- */
 #include "config.h"
 #include "iotests.h"
 #include <map>
@@ -27,84 +12,83 @@ class HttpUnitTest : public MockUnitTest
 
 class HttpCmdContext
 {
-  public:
-    HttpCmdContext() : received(false), dumpIfEmpty(false), dumpIfError(false), cbCount(0) {}
+public:
+    HttpCmdContext() :
+        received(false), dumpIfEmpty(false), dumpIfError(false), cbCount(0)
+    { }
 
     bool received;
     bool dumpIfEmpty;
     bool dumpIfError;
     unsigned cbCount;
 
-    uint16_t status;
-    lcb_STATUS err;
+    lcb_http_status_t status;
+    lcb_error_t err;
     std::string body;
 };
 
-static const char *view_common = "{ "
-                                 " \"id\" : \"_design/" DESIGN_DOC_NAME "\","
-                                 " \"language\" : \"javascript\","
-                                 " \"views\" : { "
-                                 " \"" VIEW_NAME "\" : {"
-                                 "\"map\":"
-                                 " \"function(doc) { "
-                                 "if (doc.testid == 'lcb') { emit(doc.id) } "
-                                 " } \" "
-                                 " } "
-                                 "}"
-                                 "}";
-static const char *content_type = "application/json";
+static const char *view_common =
+    "{ "
+    " \"id\" : \"_design/" DESIGN_DOC_NAME "\","
+    " \"language\" : \"javascript\","
+    " \"views\" : { "
+    " \"" VIEW_NAME "\" : {"
+    "\"map\":"
+    " \"function(doc) { "
+    "if (doc.testid == 'lcb') { emit(doc.id) } "
+    " } \" "
+    " } "
+    "}"
+    "}";
 
-static void dumpResponse(const lcb_RESPHTTP *resp)
+
+static void dumpResponse(const lcb_http_resp_t *resp)
 {
-    const char *const *headers;
-    lcb_resphttp_headers(resp, &headers);
-    if (headers) {
-        for (const char *const *cur = headers; *cur; cur += 2) {
-            std::cout << cur[0] << ": " << cur[1] << std::endl;
+    if (resp->v.v0.headers) {
+        const char *const *hdr;
+        for (hdr = resp->v.v0.headers; *hdr; hdr++) {
+            std::cout << "Header: " << *hdr << std::endl;
         }
     }
-    const char *body;
-    size_t nbody;
-    lcb_resphttp_body(resp, &body, &nbody);
-    if (body) {
+    if (resp->v.v0.bytes) {
         std::cout << "Data: " << std::endl;
-        std::cout.write((const char *)body, nbody);
+        std::cout.write((const char *)resp->v.v0.bytes, resp->v.v0.nbytes);
         std::cout << std::endl;
     }
 
-    const char *path;
-    size_t npath;
-    lcb_resphttp_path(resp, &path, &npath);
     std::cout << "Path: " << std::endl;
-    std::cout.write(path, npath);
+    std::cout.write(resp->v.v0.path, resp->v.v0.npath);
     std::cout << std::endl;
+
 }
 
 extern "C" {
-static void httpSimpleCallback(lcb_INSTANCE *, lcb_CALLBACK_TYPE, const lcb_RESPHTTP *resp)
-{
-    HttpCmdContext *htctx;
-    lcb_resphttp_cookie(resp, (void **)&htctx);
-    lcb_STATUS rc = lcb_resphttp_status(resp);
-    htctx->err = rc;
-    lcb_resphttp_http_status(resp, &htctx->status);
-    htctx->received = true;
-    htctx->cbCount++;
 
-    const char *body;
-    size_t nbody;
-    lcb_resphttp_body(resp, &body, &nbody);
-    if (body) {
-        htctx->body.assign(body, nbody);
-    }
+    static void httpSimpleCallback(lcb_http_request_t request,
+                                   lcb_t instance,
+                                   const void *cookie,
+                                   lcb_error_t error,
+                                   const lcb_http_resp_t *resp)
+    {
+        HttpCmdContext *htctx;
+        htctx = reinterpret_cast<HttpCmdContext *>((void *)cookie);
+        htctx->err = error;
+        htctx->status = resp->v.v0.status;
+        htctx->received = true;
+        htctx->cbCount++;
 
-    if ((nbody == 0 && htctx->dumpIfEmpty) || (rc != LCB_SUCCESS && htctx->dumpIfError)) {
-        std::cout << "Count: " << htctx->cbCount << std::endl
-                  << "Code: " << rc << std::endl
-                  << "nBytes: " << nbody << std::endl;
-        dumpResponse(resp);
+        if (resp->v.v0.bytes) {
+            htctx->body.assign((const char *)resp->v.v0.bytes, resp->v.v0.nbytes);
+        }
+
+        if ((resp->v.v0.nbytes == 0 && htctx->dumpIfEmpty) ||
+                (error != LCB_SUCCESS && htctx->dumpIfError)) {
+            std::cout << "Count: " << htctx->cbCount << std::endl
+                      << "Code: " << error << std::endl
+                      << "nBytes: " << resp->v.v0.nbytes << std::endl;
+            dumpResponse(resp);
+        }
     }
-}
 }
 
 /**
@@ -117,31 +101,34 @@ TEST_F(HttpUnitTest, testPut)
 {
     SKIP_IF_MOCK();
     HandleWrap hw;
-    lcb_INSTANCE *instance;
-    createConnection(hw, &instance);
-    lcb_install_callback3(instance, LCB_CALLBACK_HTTP, (lcb_RESPCALLBACK)httpSimpleCallback);
+    lcb_t instance;
+    createConnection(hw, instance);
 
-    std::string design_doc_path("/_design/" DESIGN_DOC_NAME);
-    lcb_CMDHTTP *cmd;
-    lcb_cmdhttp_create(&cmd, LCB_HTTP_TYPE_VIEW);
-    lcb_cmdhttp_path(cmd, design_doc_path.c_str(), design_doc_path.size());
-    lcb_cmdhttp_method(cmd, LCB_HTTP_METHOD_PUT);
-    lcb_cmdhttp_body(cmd, view_common, strlen(view_common));
-    lcb_cmdhttp_content_type(cmd, content_type, strlen(content_type));
+    const char *design_doc_path = "/_design/" DESIGN_DOC_NAME;
+    lcb_http_cmd_st cmd;
+    cmd = lcb_http_cmd_st(design_doc_path, strlen(design_doc_path),
+                          view_common, strlen(view_common),
+                          LCB_HTTP_METHOD_PUT, 0,
+                          "application/json");
 
-    lcb_HTTP_HANDLE *htreq;
+    lcb_error_t err;
+    lcb_set_http_complete_callback(instance, httpSimpleCallback);
+
+    lcb_http_request_t htreq;
     HttpCmdContext ctx;
     ctx.dumpIfError = true;
-    lcb_cmdhttp_handle(cmd, &htreq);
 
-    ASSERT_EQ(LCB_SUCCESS, lcb_http(instance, &ctx, cmd));
-    lcb_cmdhttp_destroy(cmd);
+    err = lcb_make_http_request(instance, &ctx, LCB_HTTP_TYPE_VIEW,
+                                &cmd, &htreq);
+
+    ASSERT_EQ(LCB_SUCCESS, err);
     lcb_wait(instance);
 
     ASSERT_EQ(true, ctx.received);
     ASSERT_EQ(LCB_SUCCESS, ctx.err);
-    ASSERT_EQ(201, ctx.status); /* 201 Created */
+    ASSERT_EQ(LCB_HTTP_STATUS_CREATED, ctx.status);
     ASSERT_EQ(1, ctx.cbCount);
+
 }
 
 /**
@@ -156,36 +143,38 @@ TEST_F(HttpUnitTest, testGet)
     SKIP_IF_MOCK();
 
     HandleWrap hw;
-    lcb_INSTANCE *instance;
-    createConnection(hw, &instance);
-    lcb_install_callback3(instance, LCB_CALLBACK_HTTP, (lcb_RESPCALLBACK)httpSimpleCallback);
+    lcb_t instance;
+    createConnection(hw, instance);
 
-    std::string view_path("/_design/" DESIGN_DOC_NAME "/_view/" VIEW_NAME);
-    lcb_CMDHTTP *cmd;
-    lcb_cmdhttp_create(&cmd, LCB_HTTP_TYPE_VIEW);
-    lcb_cmdhttp_path(cmd, view_path.c_str(), view_path.size());
-    lcb_cmdhttp_method(cmd, LCB_HTTP_METHOD_GET);
-    lcb_cmdhttp_content_type(cmd, content_type, strlen(content_type));
+    const char *path = "_design/" DESIGN_DOC_NAME "/_view/" VIEW_NAME;
+    lcb_http_cmd_st cmd = lcb_http_cmd_st(path, strlen(path), NULL, 0,
+                                          LCB_HTTP_METHOD_GET, 0,
+                                          "application/json");
 
-    lcb_HTTP_HANDLE *htreq;
     HttpCmdContext ctx;
     ctx.dumpIfEmpty = true;
     ctx.dumpIfError = true;
-    lcb_cmdhttp_handle(cmd, &htreq);
 
-    ASSERT_EQ(LCB_SUCCESS, lcb_http(instance, &ctx, cmd));
-    lcb_cmdhttp_destroy(cmd);
+    lcb_set_http_complete_callback(instance, httpSimpleCallback);
+    lcb_error_t err;
+    lcb_http_request_t htreq;
+
+    err = lcb_make_http_request(instance, &ctx, LCB_HTTP_TYPE_VIEW,
+                                &cmd, &htreq);
+
+    ASSERT_EQ(LCB_SUCCESS, err);
     lcb_wait(instance);
 
     ASSERT_EQ(true, ctx.received);
-    ASSERT_EQ(200, ctx.status);
+    ASSERT_EQ(LCB_HTTP_STATUS_OK, ctx.status);
     ASSERT_GT(ctx.body.size(), 0U);
     ASSERT_EQ(ctx.cbCount, 1);
 
     unsigned ii;
     const char *pcur;
 
-    for (ii = 0, pcur = ctx.body.c_str(); ii < ctx.body.size() && isspace(*pcur); ii++, pcur++) {
+    for (ii = 0, pcur = ctx.body.c_str();
+            ii < ctx.body.size() && isspace(*pcur); ii++, pcur++) {
         /* no body */
     }
 
@@ -196,11 +185,13 @@ TEST_F(HttpUnitTest, testGet)
     ASSERT_NE(ctx.body.size(), ii);
     ASSERT_EQ(*pcur, '{');
 
-    for (pcur = ctx.body.c_str() + ctx.body.size() - 1; ii >= 0 && isspace(*pcur); ii--, pcur--) {
+    for (pcur = ctx.body.c_str() + ctx.body.size() - 1;
+            ii >= 0 && isspace(*pcur); ii--, pcur--) {
         /* no body */
     }
     ASSERT_GE(ii, 0U);
     ASSERT_EQ('}', *pcur);
+
 }
 
 /**
@@ -212,75 +203,68 @@ TEST_F(HttpUnitTest, testGet)
  */
 TEST_F(HttpUnitTest, testRefused)
 {
-    lcb_INSTANCE *instance;
+    lcb_t instance;
     HandleWrap hw;
-    createConnection(hw, &instance);
-    lcb_install_callback3(instance, LCB_CALLBACK_HTTP, (lcb_RESPCALLBACK)httpSimpleCallback);
+    createConnection(hw, instance);
 
-    std::string path("non-exist-path");
-    lcb_CMDHTTP *cmd;
-    lcb_cmdhttp_create(&cmd, LCB_HTTP_TYPE_RAW);
-    lcb_cmdhttp_path(cmd, path.c_str(), path.size());
-    const char *host = "localhost:1"; // should not have anything listening on it
-    lcb_cmdhttp_host(cmd, host, strlen(host));
-    lcb_cmdhttp_method(cmd, LCB_HTTP_METHOD_GET);
-    lcb_cmdhttp_content_type(cmd, content_type, strlen(content_type));
+    const char *path = "non-exist-path";
+    lcb_http_cmd_st cmd = lcb_http_cmd_st();
+
+    cmd.version = 1;
+    cmd.v.v1.host = "localhost:1"; // should not have anything listening on it
+    cmd.v.v1.path = "non-exist";
+    cmd.v.v1.npath = strlen(cmd.v.v1.path);
+    cmd.v.v1.method = LCB_HTTP_METHOD_GET;
+
 
     HttpCmdContext ctx;
     ctx.dumpIfEmpty = false;
     ctx.dumpIfError = false;
-    lcb_HTTP_HANDLE *htreq;
-    lcb_cmdhttp_handle(cmd, &htreq);
 
-    ASSERT_EQ(LCB_SUCCESS, lcb_http(instance, &ctx, cmd));
-    lcb_cmdhttp_destroy(cmd);
+    lcb_set_http_complete_callback(instance, httpSimpleCallback);
+    lcb_error_t err;
+    lcb_http_request_t htreq;
+
+    err = lcb_make_http_request(instance, &ctx, LCB_HTTP_TYPE_RAW,
+                                &cmd, &htreq);
+
+    ASSERT_EQ(LCB_SUCCESS, err);
     lcb_wait(instance);
-
     ASSERT_EQ(true, ctx.received);
     ASSERT_NE(0, LCB_EIFNET(ctx.err));
+
 }
 
 struct HtResult {
     std::string body;
-    std::map< std::string, std::string > headers;
+    std::map<std::string,std::string> headers;
 
     bool gotComplete;
     bool gotChunked;
-    lcb_STATUS rc;
-    uint16_t http_status;
-
-    void reset()
-    {
+    lcb_RESPHTTP res;
+    void reset() {
         body.clear();
         gotComplete = false;
         gotChunked = false;
-        rc = LCB_SUCCESS;
-        http_status = 0;
+        memset(&res, 0, sizeof res);
     }
 };
 
 extern "C" {
-static void http_callback(lcb_INSTANCE *, int, const lcb_RESPHTTP *resp)
+static void http_callback(lcb_t, int, const lcb_RESPBASE *rb)
 {
-    HtResult *me;
-    lcb_resphttp_cookie(resp, (void **)&me);
+    const lcb_RESPHTTP *htr = (const lcb_RESPHTTP *)rb;
+    HtResult *me = (HtResult *)htr->cookie;
 
-    me->rc = lcb_resphttp_status(resp);
-    lcb_resphttp_http_status(resp, &me->http_status);
-
-    const char *body;
-    size_t nbody;
-    lcb_resphttp_body(resp, &body, &nbody);
-
-    if (nbody) {
-        me->body.append(body, body + nbody);
+    if (htr->nbody) {
+        me->body.append((const char*)htr->body, (const char*)htr->body + htr->nbody);
     }
 
-    if (lcb_resphttp_is_final(resp)) {
+    if (htr->rflags & LCB_RESP_F_FINAL) {
+        me->res = *htr;
         me->gotComplete = true;
-        const char *const *cur = NULL;
-        lcb_resphttp_headers(resp, &cur);
-        for (; *cur; cur += 2) {
+        const char * const * cur = htr->headers;
+        for (; *cur; cur+=2) {
             me->headers[cur[0]] = cur[1];
         }
     } else {
@@ -289,49 +273,51 @@ static void http_callback(lcb_INSTANCE *, int, const lcb_RESPHTTP *resp)
 }
 }
 
-static void makeAdminReq(lcb_CMDHTTP **cmd, std::string &bkbuf)
+static void
+makeAdminReq(lcb_CMDHTTP& cmd, std::string& bkbuf)
 {
+    memset(&cmd, 0, sizeof cmd);
     bkbuf.assign("/pools/default/buckets/default");
 
-    lcb_cmdhttp_create(cmd, LCB_HTTP_TYPE_MANAGEMENT);
-    lcb_cmdhttp_method(*cmd, LCB_HTTP_METHOD_GET);
-    lcb_cmdhttp_path(*cmd, bkbuf.c_str(), bkbuf.size());
+    cmd.type = LCB_HTTP_TYPE_MANAGEMENT;
+    cmd.method = LCB_HTTP_METHOD_GET;
+    LCB_CMD_SET_KEY(&cmd, bkbuf.c_str(), bkbuf.size());
 }
 
 // Some more basic HTTP tests for the administrative API. We use the admin
 // API since it's always available.
 TEST_F(HttpUnitTest, testAdminApi)
 {
-    lcb_INSTANCE *instance;
+    lcb_t instance;
     HandleWrap hw;
     std::string pth;
-    createConnection(hw, &instance);
-    lcb_install_callback3(instance, LCB_CALLBACK_HTTP, (lcb_RESPCALLBACK)http_callback);
+    createConnection(hw, instance);
+    lcb_install_callback3(instance, LCB_CALLBACK_HTTP, http_callback);
 
     // Make the request; this time we make it to the 'management' API
-    lcb_CMDHTTP *cmd = NULL;
+    lcb_CMDHTTP cmd = { 0 };
 
-    makeAdminReq(&cmd, pth);
+    makeAdminReq(cmd, pth);
     HtResult htr;
     htr.reset();
 
-    lcb_STATUS err;
+    lcb_error_t err;
     lcb_sched_enter(instance);
-    err = lcb_http(instance, &htr, cmd);
+    err = lcb_http3(instance, &htr, &cmd);
     ASSERT_EQ(LCB_SUCCESS, err);
     lcb_sched_leave(instance);
     lcb_wait(instance);
 
     ASSERT_TRUE(htr.gotComplete);
-    ASSERT_EQ(LCB_SUCCESS, htr.rc);
-    ASSERT_EQ(200, htr.http_status);
+    ASSERT_EQ(LCB_SUCCESS, htr.res.rc);
+    ASSERT_EQ(200, htr.res.htstatus);
     ASSERT_FALSE(htr.body.empty());
 
     // Try with a chunked request
     htr.reset();
-    lcb_cmdhttp_streaming(cmd, true);
+    cmd.cmdflags |= LCB_CMDHTTP_F_STREAM;
     lcb_sched_enter(instance);
-    err = lcb_http(instance, &htr, cmd);
+    err = lcb_http3(instance, &htr, &cmd);
     ASSERT_EQ(LCB_SUCCESS, err);
     lcb_sched_leave(instance);
     lcb_wait(instance);
@@ -340,118 +326,113 @@ TEST_F(HttpUnitTest, testAdminApi)
     ASSERT_TRUE(htr.gotChunked);
 
     // try another one, but this time cancelling it..
-    lcb_HTTP_HANDLE *reqh;
-    lcb_cmdhttp_handle(cmd, &reqh);
+    lcb_http_request_t reqh;
+    cmd.reqhandle = &reqh;
     lcb_sched_enter(instance);
-    err = lcb_http(instance, NULL, cmd);
+    err = lcb_http3(instance, NULL, &cmd);
     ASSERT_EQ(LCB_SUCCESS, err);
     ASSERT_FALSE(reqh == NULL);
     lcb_sched_leave(instance);
-    lcb_http_cancel(instance, reqh);
+    lcb_cancel_http_request(instance, reqh);
 
     // Try another one, allocating a request body. Unfortunately, we need
     // to cancel this one too, as none of the mock's endpoints support a
     // request body
-    lcb_cmdhttp_handle(cmd, &reqh);
-    lcb_cmdhttp_body(cmd, "FOO", 3);
-    lcb_cmdhttp_method(cmd, LCB_HTTP_METHOD_PUT);
-    err = lcb_http(instance, NULL, cmd);
+    cmd.reqhandle = &reqh;
+    cmd.body = "FOO";
+    cmd.nbody = 3;
+    cmd.method = LCB_HTTP_METHOD_PUT;
+    err = lcb_http3(instance, NULL, &cmd);
     ASSERT_EQ(LCB_SUCCESS, err);
     ASSERT_FALSE(reqh == NULL);
     lcb_sched_leave(instance);
-    lcb_http_cancel(instance, reqh);
-
-    lcb_cmdhttp_destroy(cmd);
+    lcb_cancel_http_request(instance, reqh);
 }
 
+
 extern "C" {
-static void doubleCancel_callback(lcb_INSTANCE *instance, int, const lcb_RESPHTTP *resp)
+static void doubleCancel_callback(lcb_t instance, int, const lcb_RESPBASE *rb)
 {
-    if (lcb_resphttp_is_final(resp)) {
-        lcb_HTTP_HANDLE *handle = NULL;
-        lcb_resphttp_handle(resp, &handle);
-        lcb_http_cancel(instance, handle);
-        lcb_http_cancel(instance, handle);
+    const lcb_RESPHTTP *resp = (const lcb_RESPHTTP *)rb;
+    if (resp->rflags & LCB_RESP_F_FINAL) {
+        lcb_cancel_http_request(instance, resp->_htreq);
+        lcb_cancel_http_request(instance, resp->_htreq);
     }
 }
 }
 
 TEST_F(HttpUnitTest, testDoubleCancel)
 {
-    lcb_INSTANCE *instance;
+    lcb_t instance;
     HandleWrap hw;
-    createConnection(hw, &instance);
-    lcb_install_callback3(instance, LCB_CALLBACK_HTTP, (lcb_RESPCALLBACK)doubleCancel_callback);
+    createConnection(hw, instance);
+    lcb_install_callback3(instance, LCB_CALLBACK_HTTP, doubleCancel_callback);
 
     // Make the request; this time we make it to the 'management' API
-    lcb_CMDHTTP *cmd = NULL;
+    lcb_CMDHTTP cmd = { 0 };
     std::string bk;
-    makeAdminReq(&cmd, bk);
+    makeAdminReq(cmd, bk);
     lcb_sched_enter(instance);
-    ASSERT_EQ(LCB_SUCCESS, lcb_http(instance, NULL, cmd));
-    lcb_cmdhttp_destroy(cmd);
+    ASSERT_EQ(LCB_SUCCESS, lcb_http3(instance, NULL, &cmd));
     lcb_sched_leave(instance);
     lcb_wait(instance);
     // No crashes or errors here means we've done OK
 }
 
-extern "C" {
-static void cancelVerify_callback(lcb_INSTANCE *instance, int, const lcb_RESPHTTP *resp)
-{
-    bool *bCancelled;
-    lcb_resphttp_cookie(resp, (void **)&bCancelled);
 
-    ASSERT_EQ(0, lcb_resphttp_is_final(resp));
+extern "C" {
+static void cancelVerify_callback(lcb_t instance, int, const lcb_RESPBASE *rb)
+{
+    const lcb_RESPHTTP *resp = (const lcb_RESPHTTP *)rb;
+    bool *bCancelled = (bool *)resp->cookie;
+
+    ASSERT_EQ(0, resp->rflags & LCB_RESP_F_FINAL);
     ASSERT_FALSE(*bCancelled);
 
-    lcb_HTTP_HANDLE *handle;
-    lcb_resphttp_handle(resp, &handle);
-    lcb_http_cancel(instance, handle);
+    lcb_cancel_http_request(instance, resp->_htreq);
     *bCancelled = true;
 }
 }
 // Ensure cancel actually does what it claims to do
 TEST_F(HttpUnitTest, testCancelWorks)
 {
-    lcb_INSTANCE *instance;
+    lcb_t instance;
     HandleWrap hw;
-    createConnection(hw, &instance);
-    lcb_install_callback3(instance, LCB_CALLBACK_HTTP, (lcb_RESPCALLBACK)cancelVerify_callback);
-    lcb_CMDHTTP *cmd = NULL;
+    createConnection(hw, instance);
+    lcb_install_callback3(instance, LCB_CALLBACK_HTTP, cancelVerify_callback);
+    lcb_CMDHTTP cmd;
     std::string ss;
-    makeAdminReq(&cmd, ss);
+    makeAdminReq(cmd, ss);
     // Make it chunked
-    lcb_cmdhttp_streaming(cmd, true);
+    cmd.cmdflags |= LCB_CMDHTTP_F_STREAM;
     bool cookie = false;
     lcb_sched_enter(instance);
-    ASSERT_EQ(LCB_SUCCESS, lcb_http(instance, &cookie, cmd));
-    lcb_cmdhttp_destroy(cmd);
+    ASSERT_EQ(LCB_SUCCESS, lcb_http3(instance, &cookie, &cmd));
     lcb_sched_leave(instance);
     lcb_wait(instance);
 }
 
 extern "C" {
-static void noInvoke_callback(lcb_INSTANCE *, int, const lcb_RESPBASE *)
+static void noInvoke_callback(lcb_t, int, const lcb_RESPBASE*)
 {
     EXPECT_FALSE(true) << "This callback should not be invoked!";
 }
 }
 TEST_F(HttpUnitTest, testDestroyWithActiveRequest)
 {
-    lcb_INSTANCE *instance;
+    lcb_t instance;
     // Note the one-arg form of createConnection which doesn't come with the
     // magical HandleWrap; this is because we destroy our instance explicitly
     // here.
-    createConnection(&instance);
+    createConnection(instance);
 
-    lcb_CMDHTTP *cmd;
+    lcb_CMDHTTP cmd;
     std::string ss;
-    makeAdminReq(&cmd, ss);
+    makeAdminReq(cmd, ss);
 
-    lcb_install_callback3(instance, LCB_CALLBACK_HTTP, noInvoke_callback);
+    lcb_install_callback3(instance,LCB_CALLBACK_HTTP, noInvoke_callback);
     lcb_sched_enter(instance);
-    ASSERT_EQ(LCB_SUCCESS, lcb_http(instance, NULL, cmd));
-    lcb_cmdhttp_destroy(cmd);
+    ASSERT_EQ(LCB_SUCCESS, lcb_http3(instance, NULL, &cmd));
     lcb_sched_leave(instance);
     lcb_destroy(instance);
 }

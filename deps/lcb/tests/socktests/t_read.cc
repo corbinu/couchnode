@@ -2,11 +2,8 @@
 using namespace LCBTest;
 using std::string;
 using std::vector;
-class SockReadTest : public SockTest
-{
-};
-namespace
-{
+class SockReadTest : public SockTest {};
+namespace {
 
 /**
  * Set a specific 'rdwant' value. Send data smaller than the want, and then
@@ -75,7 +72,8 @@ TEST_F(SockReadTest, testBrokenRead)
     loop->setBreakCondition(&ebc);
     loop->start();
     cf.wait();
-    ASSERT_TRUE(sock.lasterr == LCB_NETWORK_ERROR || sock.lasterr == LCB_ESOCKSHUTDOWN);
+    ASSERT_TRUE(sock.lasterr == LCB_NETWORK_ERROR ||
+            sock.lasterr == LCB_ESOCKSHUTDOWN);
 }
 
 TEST_F(SockReadTest, testReadAhead)
@@ -128,16 +126,13 @@ TEST_F(SockReadTest, testOrderlyClose)
     ASSERT_EQ(expected, sock.getReceived());
 }
 
-class ChunkReadActions : public IOActions
-{
-  public:
+class ChunkReadActions : public IOActions {
+public:
     int numChunks;
-    vector< char > buffer;
-    void onRead(ESocket *s, size_t nr)
-    {
+    vector<char> buffer;
+    void onRead(ESocket *s, size_t nr) {
         lcbio_CTXRDITER iter;
-        LCBIO_CTX_ITERFOR(s->ctx, &iter, nr)
-        {
+        LCBIO_CTX_ITERFOR(s->ctx, &iter, nr) {
             unsigned nbuf = lcbio_ctx_risize(&iter);
             void *buf = lcbio_ctx_ribuf(&iter);
             numChunks++;
@@ -145,27 +140,24 @@ class ChunkReadActions : public IOActions
         }
     }
 
-    ChunkReadActions() : IOActions()
-    {
+    ChunkReadActions() : IOActions() {
         numChunks = 0;
     }
 };
 
-class CRABreakCondition : public BreakCondition
-{
-  public:
+class CRABreakCondition : public BreakCondition {
+public:
     ChunkReadActions *cra;
     int expected;
-    CRABreakCondition(ChunkReadActions *actions, int exp)
-    {
+    CRABreakCondition(ChunkReadActions *actions, int exp) {
         cra = actions;
         expected = exp;
     }
 
-    bool shouldBreakImpl()
-    {
+    bool shouldBreakImpl() {
         return cra->numChunks >= expected;
     }
+
 };
 /** Tests the iterator chunking mechanism */
 TEST_F(SockReadTest, testChunkedIter)
@@ -192,4 +184,4 @@ TEST_F(SockReadTest, testChunkedIter)
     ASSERT_EQ(toSend, string(cra.buffer.begin(), cra.buffer.end()));
     sf.wait();
 }
-} // namespace
+}

@@ -1,6 +1,6 @@
 /* -*- Mode: C; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2017-2019 Couchbase, Inc.
+ *     Copyright 2017 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -19,46 +19,60 @@
 #include <stdlib.h>
 
 #include <libcouchbase/couchbase.h>
+#include <libcouchbase/n1ql.h>
 #include <assert.h>
 #include <string.h>
 
-static void subdoc_callback(lcb_INSTANCE *instance, int type, const lcb_RESPSUBDOC *resp)
+static void generic_callback(lcb_t instance, int type, const lcb_RESPBASE *rb)
 {
-    lcb_STATUS rc = lcb_respsubdoc_status(resp);
-    size_t idx, total;
-    if (rc != LCB_SUCCESS && rc != LCB_SUBDOC_MULTI_FAILURE) {
-        printf("Failure: 0x%x, %s\n", lcb_strerror_short(rc));
+    if (rb->rc != LCB_SUCCESS && rb->rc != LCB_SUBDOC_MULTI_FAILURE) {
+        printf("Failure: 0x%x, %s\n", rb->rc, lcb_strerror(instance, rb->rc));
         return;
     }
 
-    total = lcb_respsubdoc_result_size(resp);
-    for (idx = 0; idx < total; idx++) {
-        const char *value;
-        size_t nvalue;
-        rc = lcb_respsubdoc_result_status(resp, idx);
-        lcb_respsubdoc_result_value(resp, idx, &value, &nvalue);
-        printf("[%lu]: 0x%x. %.*s\n", idx, rc, (int)nvalue, value);
+    switch (type) {
+        case LCB_CALLBACK_SDLOOKUP: {
+            lcb_SDENTRY ent;
+            size_t iter = 0;
+            size_t index = 0;
+            const lcb_RESPSUBDOC *resp = (const lcb_RESPSUBDOC *)rb;
+
+            while (lcb_sdresult_next(resp, &ent, &iter)) {
+                if (index == 0 && ent.status != LCB_SUCCESS) {
+                    // attribute does not exist, skip response
+                    return;
+                }
+                if (index == 1) {
+                    printf(" * %.*s: %.*s%%\n", (int)resp->nkey, resp->key, (int)ent.nvalue, ent.value);
+                }
+                index++;
+            }
+            break;
+        }
+        case LCB_CALLBACK_SDMUTATE: {
+            lcb_SDENTRY ent;
+            size_t iter = 0;
+            size_t oix = 0;
+            const lcb_RESPSUBDOC *resp = (const lcb_RESPSUBDOC *)rb;
+            while (lcb_sdresult_next(resp, &ent, &iter)) {
+                size_t index = oix++;
+                if (type == LCB_CALLBACK_SDMUTATE) {
+                    index = ent.index;
+                }
+                printf("[%lu]: 0x%x. %.*s\n", index, ent.status, (int)ent.nvalue, ent.value);
+            }
+            break;
+        }
     }
 }
 
-static void n1qlrow_callback(lcb_INSTANCE *instance, int type, const lcb_RESPN1QL *resp)
+static void n1qlrow_callback(lcb_t instance, int type, const lcb_RESPN1QL *resp)
 {
-    lcb_STATUS rc = lcb_respn1ql_status(resp);
-    const char *row;
-    size_t nrow;
-
-    lcb_respn1ql_row(resp, &row, &nrow);
-    if (rc != LCB_SUCCESS) {
-        const lcb_RESPHTTP *http;
-        uint16_t status;
-
-        lcb_respn1ql_http_response(resp, &http);
-        printf("Failure: 0x%x, %s\n", rc, lcb_strerror(instance, rc));
-        lcb_resphttp_http_status(http, &status);
-        printf("HTTP status: %d\n", (int)status);
+    if (resp->rc != LCB_SUCCESS) {
+        printf("Failure: 0x%x, %s\n", resp->rc, lcb_strerror(instance, resp->rc));
+        printf("HTTP status: %d\n", (int)resp->htresp->htstatus);
         {
-            const char *const *hdr;
-            lcb_resphttp_headers(http, &hdr);
+            const char *const *hdr = resp->htresp->headers;
             for (; hdr && *hdr; hdr++) {
                 printf("%s", *hdr);
                 if (hdr + 1) {
@@ -67,15 +81,15 @@ static void n1qlrow_callback(lcb_INSTANCE *instance, int type, const lcb_RESPN1Q
                 printf("\n");
             }
         }
-        printf("%.*s\n", (int)nrow, row);
+        printf("%.*s\n", (int)resp->nrow, resp->row);
         return;
     }
 
     char *start = "{\"docID\":\"";
     char *stop = "\"";
 
-    char *key = strstr(row, start);
-    if (key == NULL || key != row) {
+    char *key = strstr(resp->row, start);
+    if (key == NULL || key != resp->row) {
         return;
     }
     key += strlen(start);
@@ -87,20 +101,24 @@ static void n1qlrow_callback(lcb_INSTANCE *instance, int type, const lcb_RESPN1Q
 
     lcb_sched_enter(instance);
     {
+        lcb_error_t rc;
+        lcb_CMDSUBDOC cmd = {};
+        lcb_SDSPEC specs[2] = {};
         char *path = "discounts.jsmith123";
 
-        lcb_SUBDOCOPS *specs;
-        lcb_subdocops_create(&specs, 2);
-        lcb_subdocops_exists(specs, 0, LCB_SUBDOCOPS_F_XATTRPATH, path, strlen(path));
-        lcb_subdocops_exists(specs, 1, LCB_SUBDOCOPS_F_XATTRPATH, path, strlen(path));
+        LCB_CMD_SET_KEY(&cmd, key, strlen(key));
 
-        lcb_CMDSUBDOC *cmd;
-        lcb_cmdsubdoc_create(&cmd);
-        lcb_cmdsubdoc_key(cmd, key, strlen(key));
-        lcb_cmdsubdoc_operations(cmd, specs);
-        rc = lcb_subdoc(instance, NULL, cmd);
-        lcb_subdocops_destroy(specs);
-        lcb_cmdsubdoc_destroy(cmd);
+        specs[0].sdcmd = LCB_SDCMD_EXISTS;
+        specs[0].options = LCB_SDSPEC_F_XATTRPATH;
+        LCB_SDSPEC_SET_PATH(&specs[0], path, strlen(path));
+
+        specs[1].sdcmd = LCB_SDCMD_GET;
+        specs[1].options = LCB_SDSPEC_F_XATTRPATH;
+        LCB_SDSPEC_SET_PATH(&specs[1], path, strlen(path));
+
+        cmd.specs = specs;
+        cmd.nspecs = 2;
+        rc = lcb_subdoc3(instance, NULL, &cmd);
         assert(rc == LCB_SUCCESS);
     }
     lcb_sched_leave(instance);
@@ -108,7 +126,7 @@ static void n1qlrow_callback(lcb_INSTANCE *instance, int type, const lcb_RESPN1Q
 
 #define DEFAULT_CONNSTR "couchbase://localhost/travel-sample"
 
-static lcb_INSTANCE *connect_as(char *username, char *password)
+static lcb_t connect_as(char *username, char *password)
 {
     struct lcb_create_st crst = {.version = 3};
 
@@ -116,8 +134,8 @@ static lcb_INSTANCE *connect_as(char *username, char *password)
     crst.v.v3.username = username;
     crst.v.v3.passwd = password;
 
-    lcb_INSTANCE *instance;
-    lcb_STATUS rc;
+    lcb_t instance;
+    lcb_error_t rc;
 
     rc = lcb_create(&instance, &crst);
     assert(rc == LCB_SUCCESS);
@@ -127,87 +145,97 @@ static lcb_INSTANCE *connect_as(char *username, char *password)
     rc = lcb_get_bootstrap_status(instance);
     assert(rc == LCB_SUCCESS);
 
-    lcb_install_callback3(instance, LCB_CALLBACK_SDLOOKUP, (lcb_RESPCALLBACK)subdoc_callback);
-    lcb_install_callback3(instance, LCB_CALLBACK_SDMUTATE, (lcb_RESPCALLBACK)subdoc_callback);
+    lcb_install_callback3(instance, LCB_CALLBACK_DEFAULT, generic_callback);
 
     return instance;
 }
 
 int main()
 {
-    lcb_STATUS rc;
-    lcb_INSTANCE *instance;
+    lcb_error_t rc;
+    lcb_t instance;
 
     instance = connect_as("Administrator", "password");
 
     // Add key-value pairs to hotel_10138, representing traveller-Ids and associated discount percentages
     {
-        lcb_SUBDOCOPS *specs;
-        lcb_subdocops_create(&specs, 4);
+        lcb_CMDSUBDOC cmd = {};
+        lcb_SDSPEC specs[4] = {};
+        char *key = "hotel_10138";
 
+        LCB_CMD_SET_KEY(&cmd, key, strlen(key));
         {
             char *path = "discounts.jsmith123";
             char *val = "20";
-            lcb_subdocops_dict_upsert(specs, 0, LCB_SUBDOCOPS_F_MKINTERMEDIATES | LCB_SUBDOCOPS_F_XATTRPATH, path,
-                                      strlen(path), val, strlen(val));
+
+            specs[0].sdcmd = LCB_SDCMD_DICT_UPSERT;
+            specs[0].options = LCB_SDSPEC_F_MKINTERMEDIATES | LCB_SDSPEC_F_XATTRPATH;
+            LCB_SDSPEC_SET_PATH(&specs[0], path, strlen(path));
+            LCB_CMD_SET_VALUE(&specs[0], val, strlen(val));
         }
         {
             char *path = "discounts.pjones356";
             char *val = "30";
-            lcb_subdocops_dict_upsert(specs, 1, LCB_SUBDOCOPS_F_MKINTERMEDIATES | LCB_SUBDOCOPS_F_XATTRPATH, path,
-                                      strlen(path), val, strlen(val));
+
+            specs[1].sdcmd = LCB_SDCMD_DICT_UPSERT;
+            specs[1].options = LCB_SDSPEC_F_MKINTERMEDIATES | LCB_SDSPEC_F_XATTRPATH;
+            LCB_SDSPEC_SET_PATH(&specs[1], path, strlen(path));
+            LCB_CMD_SET_VALUE(&specs[1], val, strlen(val));
         }
         // The following lines, "insert" and "remove", simply demonstrate insertion and
         // removal of the same path and value
         {
             char *path = "discounts.jbrown789";
             char *val = "25";
-            lcb_subdocops_dict_add(specs, 2, LCB_SUBDOCOPS_F_MKINTERMEDIATES | LCB_SUBDOCOPS_F_XATTRPATH, path,
-                                   strlen(path), val, strlen(val));
+
+            specs[2].sdcmd = LCB_SDCMD_DICT_ADD;
+            specs[2].options = LCB_SDSPEC_F_MKINTERMEDIATES | LCB_SDSPEC_F_XATTRPATH;
+            LCB_SDSPEC_SET_PATH(&specs[2], path, strlen(path));
+            LCB_CMD_SET_VALUE(&specs[2], val, strlen(val));
         }
         {
             char *path = "discounts.jbrown789";
-            lcb_subdocops_remove(specs, 3, LCB_SUBDOCOPS_F_XATTRPATH, path, strlen(path));
+
+            specs[3].sdcmd = LCB_SDCMD_REMOVE;
+            specs[3].options = LCB_SDSPEC_F_XATTRPATH;
+            LCB_SDSPEC_SET_PATH(&specs[3], path, strlen(path));
         }
 
-        char *key = "hotel_10138";
-
-        lcb_CMDSUBDOC *cmd;
-        lcb_cmdsubdoc_create(&cmd);
-        lcb_cmdsubdoc_key(cmd, key, strlen(key));
-        lcb_cmdsubdoc_operations(cmd, specs);
-        rc = lcb_subdoc(instance, NULL, cmd);
-        lcb_subdocops_destroy(specs);
-        lcb_cmdsubdoc_destroy(cmd);
+        cmd.specs = specs;
+        cmd.nspecs = 4;
+        rc = lcb_subdoc3(instance, NULL, &cmd);
         assert(rc == LCB_SUCCESS);
     }
 
     // Add key - value pairs to hotel_10142, again representing traveller - Ids and associated discount percentages
     {
-        lcb_SUBDOCOPS *specs;
-        lcb_subdocops_create(&specs, 2);
+        lcb_CMDSUBDOC cmd = {};
+        lcb_SDSPEC specs[2] = {};
+        char *key = "hotel_10142";
+
+        LCB_CMD_SET_KEY(&cmd, key, strlen(key));
         {
             char *path = "discounts.jsmith123";
             char *val = "15";
-            lcb_subdocops_dict_upsert(specs, 0, LCB_SUBDOCOPS_F_MKINTERMEDIATES | LCB_SUBDOCOPS_F_XATTRPATH, path,
-                                      strlen(path), val, strlen(val));
+
+            specs[0].sdcmd = LCB_SDCMD_DICT_UPSERT;
+            specs[0].options = LCB_SDSPEC_F_MKINTERMEDIATES | LCB_SDSPEC_F_XATTRPATH;
+            LCB_SDSPEC_SET_PATH(&specs[0], path, strlen(path));
+            LCB_CMD_SET_VALUE(&specs[0], val, strlen(val));
         }
         {
             char *path = "discounts.pjones356";
             char *val = "10";
-            lcb_subdocops_dict_upsert(specs, 1, LCB_SUBDOCOPS_F_MKINTERMEDIATES | LCB_SUBDOCOPS_F_XATTRPATH, path,
-                                      strlen(path), val, strlen(val));
+
+            specs[1].sdcmd = LCB_SDCMD_DICT_UPSERT;
+            specs[1].options = LCB_SDSPEC_F_MKINTERMEDIATES | LCB_SDSPEC_F_XATTRPATH;
+            LCB_SDSPEC_SET_PATH(&specs[1], path, strlen(path));
+            LCB_CMD_SET_VALUE(&specs[1], val, strlen(val));
         }
 
-        char *key = "hotel_10142";
-
-        lcb_CMDSUBDOC *cmd;
-        lcb_cmdsubdoc_create(&cmd);
-        lcb_cmdsubdoc_key(cmd, key, strlen(key));
-        lcb_cmdsubdoc_operations(cmd, specs);
-        rc = lcb_subdoc(instance, NULL, cmd);
-        lcb_subdocops_destroy(specs);
-        lcb_cmdsubdoc_destroy(cmd);
+        cmd.specs = specs;
+        cmd.nspecs = 2;
+        rc = lcb_subdoc3(instance, NULL, &cmd);
         assert(rc == LCB_SUCCESS);
     }
 
@@ -215,19 +243,19 @@ int main()
 
     // Create a user and assign roles. This user will search for their available discounts.
     {
-        lcb_CMDHTTP *cmd;
+        lcb_CMDHTTP cmd = {};
         char *path = "/settings/rbac/users/local/jsmith123";
         char *payload = "password=jsmith123pwd&name=John+Smith"
                         "&roles=data_reader[travel-sample],query_select[travel-sample],data_writer[travel-sample]";
-        char *content_type = "application/x-www-form-urlencoded";
 
-        lcb_cmdhttp_create(&cmd, LCB_HTTP_TYPE_MANAGEMENT);
-        lcb_cmdhttp_method(cmd, LCB_HTTP_METHOD_PUT);
-        lcb_cmdhttp_path(cmd, path, strlen(path));
-        lcb_cmdhttp_body(cmd, payload, strlen(payload));
-        lcb_cmdhttp_content_type(cmd, content_type, strlen(content_type));
-        lcb_http(instance, NULL, cmd);
-        lcb_cmdhttp_destroy(cmd);
+        cmd.type = LCB_HTTP_TYPE_MANAGEMENT;
+        cmd.method = LCB_HTTP_METHOD_PUT;
+        LCB_CMD_SET_KEY(&cmd, path, strlen(path));
+        cmd.body = payload;
+        cmd.nbody = strlen(payload);
+        cmd.content_type = "application/x-www-form-urlencoded";
+
+        lcb_http3(instance, NULL, &cmd);
         lcb_wait(instance);
     }
 
@@ -240,16 +268,17 @@ int main()
     // used to reference each document in turn, and check for extended attributes
     // corresponding to discounts.
     {
+        lcb_CMDN1QL cmd = {};
+        lcb_N1QLPARAMS *params = lcb_n1p_new();
         char *query = "SELECT id, meta(`travel-sample`).id AS docID FROM `travel-sample`";
-        lcb_CMDN1QL *cmd;
 
-        lcb_cmdn1ql_create(&cmd);
-        lcb_cmdn1ql_statement(cmd, query, strlen(query));
-        lcb_cmdn1ql_callback(cmd, n1qlrow_callback);
+        lcb_n1p_setstmtz(params, query);
+        rc = lcb_n1p_mkcmd(params, &cmd);
+        assert(rc == LCB_SUCCESS);
+        cmd.callback = n1qlrow_callback;
 
         printf("User \"jsmith123\" has discounts in the hotels below:\n");
-        lcb_n1ql(instance, NULL, cmd);
-        lcb_cmdn1ql_destroy(cmd);
+        lcb_n1ql_query(instance, NULL, &cmd);
         lcb_wait(instance);
     }
 

@@ -7,6 +7,7 @@ var http = require('http');
 var net = require('net');
 var child_process = require('child_process');
 
+var enableDebugLogging = false;
 var defaultMockVersion = [1, 5, 15];
 var defaultMockVersionStr =
   defaultMockVersion[0] + '.' +
@@ -171,7 +172,9 @@ function _startMock(mockpath, options, callback) {
       }
     });
     socket.on('error', function(err) {
-      // console.log('mocksock err', err);
+      if (enableDebugLogging) {
+        console.log('mocksock err', err);
+      }
     });
     socket.command = function(cmdName, payload, callback) {
       if (callback === undefined) {
@@ -229,7 +232,9 @@ function _startMock(mockpath, options, callback) {
       return;
     });
     mockproc.stderr.on('data', function(data) {
-      //console.log('mockproc err: ' + data.toString());
+      if (enableDebugLogging) {
+        console.log('mockproc err: ' + data.toString());
+      }
     });
     mockproc.on('close', function(code) {
       if (code !== 0 && code !== 1) {

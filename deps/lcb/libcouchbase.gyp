@@ -48,6 +48,13 @@
     ],
 
     'conditions': [
+      ['OS!="win"', {
+        "link_settings": {
+          "libraries": [
+            "-lresolv"
+          ]
+        }
+      }],
       ['OS=="win"', {
         'include_dirs': [
           '<(node_root_dir)/deps/openssl/openssl/include',
@@ -211,6 +218,7 @@
         'src/mcserver/negotiate.cc',
         'src/n1ql/ixmgmt.cc',
         'src/n1ql/n1ql.cc',
+        'src/n1ql/params.cc',
         'src/netbuf/netbuf.c',
         'src/operations/cbflush.cc',
         'src/operations/counter.cc',
@@ -243,7 +251,6 @@
         'src/callbacks.c',
         'src/cbft.cc',
         'src/cntl.cc',
-        'src/collections.cc',
         'src/connspec.cc',
         'src/crypto.cc',
         'src/dns-srv.cc',
@@ -253,10 +260,11 @@
         'src/gethrtime.c',
         'src/handler.cc',
         'src/hashtable.c',
-        # 'src/hdr_timings.c', we use timings.c
+        ## 'src/hdr_timings.c',
         'src/hostlist.cc',
         'src/instance.cc',
         'src/iofactory.c',
+        'src/legacy.c',
         'src/list.c',
         'src/logging.c',
         'src/newconfig.cc',

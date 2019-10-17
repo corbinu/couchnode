@@ -1,6 +1,5 @@
-/* -*- Mode: C++; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2017-2019 Couchbase, Inc.
+ *     Copyright 2017 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -15,11 +14,16 @@
  *   limitations under the License.
  */
 
+#define LCB_NO_DEPR_CXX_CTORS
+
 #include "config.h"
 #include <sys/types.h>
 #include <libcouchbase/couchbase.h>
 #include <libcouchbase/vbucket.h>
+#include <libcouchbase/api3.h>
 #include <libcouchbase/pktfwd.h>
+#include <libcouchbase/n1ql.h>
+#include <libcouchbase/cbft.h>
 #include <memcached/protocol_binary.h>
 #include <iostream>
 #include <iomanip>
@@ -46,15 +50,15 @@ static void die(const char *msg)
     exit(EXIT_FAILURE);
 }
 
-static void good_or_die(lcb_STATUS rc, const char *msg = "")
+static void good_or_die(lcb_error_t rc, const char *msg = "")
 {
     if (rc != LCB_SUCCESS) {
-        fprintf(stderr, "%s: %s\n", msg, lcb_strerror_short(rc));
+        fprintf(stderr, "%s\n0x%02x: %s\n", msg, rc, lcb_strerror(NULL, rc));
         exit(EXIT_FAILURE);
     }
 }
 
-static lcb_INSTANCE *instance = NULL;
+static lcb_t instance = NULL;
 static struct event_base *evbase = NULL;
 static Histogram hg;
 
@@ -73,7 +77,9 @@ class Configuration
         o_port.abbrev('p').description("Port for proxy").setDefault(11211);
     }
 
-    ~Configuration() {}
+    ~Configuration()
+    {
+    }
 
     void addToParser(Parser &parser)
     {
@@ -82,13 +88,15 @@ class Configuration
         parser.addOption(o_port);
     }
 
-    void processOptions() {}
+    void processOptions()
+    {
+    }
 
     void fillCropts(lcb_create_st &opts)
     {
         m_params.fillCropts(opts);
     }
-    lcb_STATUS doCtls()
+    lcb_error_t doCtls()
     {
         return m_params.doCtls(instance);
     }
@@ -162,11 +170,10 @@ static void dump_bytes(const struct client *cl, const char *msg, const void *ptr
     size_t remainder = len % width;
     std::stringstream ss;
 
-    ss << msg << ", " << len
-       << " bytes\n"
-          "             +-------------------------------------------------+\n"
-          "             |  0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f |\n"
-          "    +--------+-------------------------------------------------+----------------+";
+    ss << msg << ", " << len << " bytes\n"
+                                "             +-------------------------------------------------+\n"
+                                "             |  0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f |\n"
+                                "    +--------+-------------------------------------------------+----------------+";
 
     unsigned int row = 0;
     while (row < full_rows) {
@@ -230,7 +237,7 @@ static void dump_bytes(const struct client *cl, const char *msg, const void *ptr
     lcb_log(LOGARGS(INFO), CL_LOGFMT "%s", CL_LOGID(cl), ss.str().c_str());
 }
 
-static void pktfwd_callback(lcb_INSTANCE *, const void *cookie, lcb_STATUS err, lcb_PKTFWDRESP *resp)
+static void pktfwd_callback(lcb_t, const void *cookie, lcb_error_t err, lcb_PKTFWDRESP *resp)
 {
     good_or_die(err, "Failed to forward a packet");
 
@@ -245,7 +252,7 @@ static void pktfwd_callback(lcb_INSTANCE *, const void *cookie, lcb_STATUS err, 
 
 extern "C" {
 #define DEFINE_ROW_CALLBACK(cbname, resptype)                                                                          \
-    static void cbname(lcb_INSTANCE *, int, const resptype *resp)                                                      \
+    static void cbname(lcb_t, int, const resptype *resp)                                                               \
     {                                                                                                                  \
         char key[100] = {0};                                                                                           \
         size_t nkey;                                                                                                   \
@@ -322,32 +329,43 @@ static void conn_readcb(struct bufferevent *bev, void *cookie)
             goto FWD;
         }
         char *key = (char *)pkt + sizeof(header) + extlen;
-        lcb_STATUS rc;
-        if (memcmp(key, "n1ql ", 5) == 0) {
-            lcb_CMDN1QL *cmd;
-            lcb_cmdn1ql_create(&cmd);
+        lcb_error_t rc;
+        int cbas = memcmp(key, "cbas ", 5) == 0;
+        if (cbas || memcmp(key, "n1ql ", 5) == 0) {
+            lcb_N1QLPARAMS *nparams = lcb_n1p_new();
 
-            rc = lcb_cmdn1ql_statement(cmd, key + 5, keylen - 5);
+            rc = lcb_n1p_setquery(nparams, key + 5, keylen - 5, LCB_N1P_QUERY_STATEMENT);
             if (rc != LCB_SUCCESS) {
-                lcb_log(LOGARGS(INFO), CL_LOGFMT "failed to set query for N1QL", CL_LOGID(cl));
+                lcb_log(LOGARGS(INFO), CL_LOGFMT "failed to set query for %s", CL_LOGID(cl),
+                        cbas ? "analytics" : "N1QL");
                 goto FWD;
             }
-            lcb_cmdn1ql_callback(cmd, n1ql_callback);
+            lcb_CMDN1QL cmd = {0};
+            rc = lcb_n1p_mkcmd(nparams, &cmd);
+            if (rc != LCB_SUCCESS) {
+                lcb_log(LOGARGS(INFO), CL_LOGFMT "failed to generate %s command", CL_LOGID(cl),
+                        cbas ? "analytics" : "N1QL");
+                goto FWD;
+            }
+            cmd.callback = n1ql_callback;
             cl->cnt = 0;
-            rc = lcb_n1ql(instance, cl, cmd);
-            lcb_cmdn1ql_destroy(cmd);
+            if (cbas) {
+                cmd.cmdflags |= LCB_CMDN1QL_F_ANALYTICSQUERY;
+            }
+            rc = lcb_n1ql_query(instance, cl, &cmd);
             if (rc != LCB_SUCCESS) {
-                lcb_log(LOGARGS(INFO), CL_LOGFMT "failed to schedule N1QL command", CL_LOGID(cl));
+                lcb_log(LOGARGS(INFO), CL_LOGFMT "failed to schedule %s command", CL_LOGID(cl),
+                        cbas ? "analytics" : "N1QL");
                 goto FWD;
             }
+            lcb_n1p_free(nparams);
             goto DONE;
         } else if (memcmp(key, "fts ", 4) == 0) {
-            lcb_CMDFTS *cmd;
-            lcb_cmdfts_create(&cmd);
-            lcb_cmdfts_query(cmd, key + 4, keylen - 4);
-            lcb_cmdfts_callback(cmd, fts_callback);
-            rc = lcb_fts(instance, cl, cmd);
-            lcb_cmdfts_destroy(cmd);
+            lcb_CMDFTS cmd = {0};
+            cmd.query = key + 4;
+            cmd.nquery = keylen - 4;
+            rc = lcb_fts_query(instance, cl, &cmd);
+            cmd.callback = fts_callback;
             cl->cnt = 0;
             if (rc != LCB_SUCCESS) {
                 lcb_log(LOGARGS(INFO), CL_LOGFMT "failed to schedule FTS command", CL_LOGID(cl));
@@ -418,7 +436,7 @@ static void setup_listener()
     lcb_log(LOGARGS(INFO), "Listening incoming proxy connections on port %d", config.port());
 }
 
-static void bootstrap_callback(lcb_INSTANCE *, lcb_STATUS err)
+static void bootstrap_callback(lcb_t, lcb_error_t err)
 {
     good_or_die(err, "Failed to bootstrap");
     lcb_log(LOGARGS(INFO), "connected to Couchbase Server");
@@ -435,11 +453,11 @@ static void sigint_handler(int)
     }
 }
 
-static void diag_callback(lcb_INSTANCE *, int, const lcb_RESPBASE *rb)
+static void diag_callback(lcb_t, int, const lcb_RESPBASE *rb)
 {
     const lcb_RESPDIAG *resp = (const lcb_RESPDIAG *)rb;
     if (resp->rc != LCB_SUCCESS) {
-        fprintf(stderr, "failed: %s\n", lcb_strerror_short(resp->rc));
+        fprintf(stderr, "failed: %s\n", lcb_strerror(NULL, resp->rc));
     } else {
         if (resp->njson) {
             fprintf(stderr, "\n%.*s", (int)resp->njson, resp->json);

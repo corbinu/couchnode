@@ -1,6 +1,6 @@
 /* -*- Mode: C; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2014-2019 Couchbase, Inc.
+ *     Copyright 2014 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -29,11 +29,12 @@
 #endif /* MSC_VER */
 #endif /* !INLINE */
 
-static INLINE int sllist_contains(sllist_root *list, sllist_node *item)
+
+static INLINE int
+sllist_contains(sllist_root *list, sllist_node *item)
 {
     sllist_node *ll;
-    SLLIST_FOREACH(list, ll)
-    {
+    SLLIST_FOREACH(list, ll) {
         if (item == ll) {
             return 1;
         }
@@ -41,12 +42,12 @@ static INLINE int sllist_contains(sllist_root *list, sllist_node *item)
     return 0;
 }
 
-static INLINE unsigned sllist_get_size(sllist_root *list)
+static INLINE unsigned
+sllist_get_size(sllist_root *list)
 {
     unsigned ret = 0;
     sllist_node *ll;
-    SLLIST_FOREACH(list, ll)
-    {
+    SLLIST_FOREACH(list, ll) {
         ret++;
     }
     return ret;
@@ -60,7 +61,8 @@ static INLINE unsigned sllist_get_size(sllist_root *list)
 #define slist_sanity_insert(l, n)
 #endif
 
-static INLINE void slist_iter_init_at(sllist_node *node, sllist_iterator *iter)
+static INLINE void
+slist_iter_init_at(sllist_node *node, sllist_iterator *iter)
 {
     iter->cur = node->next;
     iter->prev = node;
@@ -73,12 +75,14 @@ static INLINE void slist_iter_init_at(sllist_node *node, sllist_iterator *iter)
     }
 }
 
-static INLINE void slist_iter_init(sllist_root *list, sllist_iterator *iter)
+static INLINE void
+slist_iter_init(sllist_root *list, sllist_iterator *iter)
 {
     slist_iter_init_at(&list->first_prev, iter);
 }
 
-static INLINE void slist_iter_incr(sllist_root *list, sllist_iterator *iter)
+static INLINE void
+slist_iter_incr(sllist_root *list, sllist_iterator *iter)
 {
     if (!iter->removed) {
         iter->prev = iter->prev->next;
@@ -97,7 +101,8 @@ static INLINE void slist_iter_incr(sllist_root *list, sllist_iterator *iter)
     (void)list;
 }
 
-static INLINE void sllist_iter_remove(sllist_root *list, sllist_iterator *iter)
+static INLINE void
+sllist_iter_remove(sllist_root *list, sllist_iterator *iter)
 {
     iter->prev->next = iter->next;
 
@@ -111,7 +116,8 @@ static INLINE void sllist_iter_remove(sllist_root *list, sllist_iterator *iter)
     iter->removed = 1;
 }
 
-static INLINE void sllist_remove_head(sllist_root *list)
+static INLINE void
+sllist_remove_head(sllist_root *list)
 {
     if (!SLLIST_FIRST(list)) {
         return;
@@ -124,21 +130,22 @@ static INLINE void sllist_remove_head(sllist_root *list)
     }
 }
 
-static INLINE void sllist_remove(sllist_root *list, sllist_node *item)
+static INLINE void
+sllist_remove(sllist_root *list, sllist_node *item)
 {
     sllist_iterator iter;
-    SLLIST_ITERFOR(list, &iter)
-    {
+    SLLIST_ITERFOR(list, &iter) {
         if (iter.cur == item) {
             sllist_iter_remove(list, &iter);
             return;
         }
     }
-    fprintf(stderr, "SLLIST: Requested to remove item %p which is not in %p\n", (void *)list, (void *)item);
+    fprintf(stderr, "SLLIST: Requested to remove item %p which is not in %p\n", (void*)list, (void*)item);
     assert(0);
 }
 
-static INLINE void sllist_append(sllist_root *list, sllist_node *item)
+static INLINE void
+sllist_append(sllist_root *list, sllist_node *item)
 {
     if (SLLIST_IS_EMPTY(list)) {
         SLLIST_FIRST(list) = list->last = item;
@@ -151,7 +158,8 @@ static INLINE void sllist_append(sllist_root *list, sllist_node *item)
     item->next = NULL;
 }
 
-static INLINE void sllist_prepend(sllist_root *list, sllist_node *item)
+static INLINE void
+sllist_prepend(sllist_root *list, sllist_node *item)
 {
     if (SLLIST_IS_EMPTY(list)) {
         SLLIST_FIRST(list) = list->last = item;
@@ -162,7 +170,8 @@ static INLINE void sllist_prepend(sllist_root *list, sllist_node *item)
     }
 }
 
-static void sllist_insert(sllist_root *list, sllist_node *prev, sllist_node *item)
+static void
+sllist_insert(sllist_root *list, sllist_node *prev, sllist_node *item)
 {
     item->next = prev->next;
     prev->next = item;
@@ -171,12 +180,12 @@ static void sllist_insert(sllist_root *list, sllist_node *prev, sllist_node *ite
     }
 }
 
-static INLINE void sllist_insert_sorted(sllist_root *list, sllist_node *item,
-                                        int (*compar)(sllist_node *, sllist_node *))
+static INLINE void
+sllist_insert_sorted(sllist_root *list, sllist_node *item,
+                     int (*compar)(sllist_node*, sllist_node*))
 {
     sllist_iterator iter;
-    SLLIST_ITERFOR(list, &iter)
-    {
+    SLLIST_ITERFOR(list, &iter) {
         int rv = compar(item, iter.cur);
         /** if the item we have is before the current, prepend it here */
         if (rv <= 0) {

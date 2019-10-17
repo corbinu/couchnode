@@ -9,10 +9,10 @@
 
 using namespace cbc;
 using namespace cliopts;
-using std::endl;
+using std::string;
 using std::ifstream;
 using std::ofstream;
-using std::string;
+using std::endl;
 
 #ifndef _WIN32
 #include <unistd.h>
@@ -41,7 +41,8 @@ static string promptPassword(const char *prompt)
     return ret;
 }
 
-static void makeLowerCase(string &s)
+static void
+makeLowerCase(string &s)
 {
     for (size_t ii = 0; ii < s.size(); ++ii) {
         s[ii] = tolower(s[ii]);
@@ -49,13 +50,16 @@ static void makeLowerCase(string &s)
 }
 
 #define X(tpname, varname, longname, shortname) o_##varname(longname),
-ConnParams::ConnParams() : X_OPTIONS(X) isAdmin(false)
+ConnParams::ConnParams() :
+        X_OPTIONS(X)
+        isAdmin(false)
 {
-// Configure the options
-#undef X
-#define X(tpname, varname, longname, shortname) o_##varname.abbrev(shortname);
+    // Configure the options
+    #undef X
+    #define X(tpname, varname, longname, shortname) \
+    o_##varname.abbrev(shortname);
     X_OPTIONS(X)
-#undef X
+    #undef X
 
     o_host.description("Hostname to connect to").setDefault("localhost");
     o_host.hide();
@@ -80,7 +84,7 @@ ConnParams::ConnParams() : X_OPTIONS(X) isAdmin(false)
     o_compress.description("Turn on compression of outgoing data (second time to force compression)").setDefault(false);
 
     o_cparams.description("Additional options for connection. "
-                          "Use -Dtimeout=SECONDS for KV operation timeout");
+        "Use -Dtimeout=SECONDS for KV operation timeout");
     o_cparams.argdesc("OPTION=VALUE");
 
     // Hide some more exotic options
@@ -89,21 +93,23 @@ ConnParams::ConnParams() : X_OPTIONS(X) isAdmin(false)
     o_ssl.hide();
 }
 
-void ConnParams::setAdminMode()
+void
+ConnParams::setAdminMode()
 {
     o_user.description("Administrative username").setDefault("Administrator");
     o_passwd.description("Administrative password");
     isAdmin = true;
 }
 
-void ConnParams::addToParser(Parser &parser)
+void
+ConnParams::addToParser(Parser& parser)
 {
     string errmsg;
     try {
         loadFileDefaults();
-    } catch (string &exc) {
+    } catch (string& exc) {
         errmsg = exc;
-    } catch (const char *&exc) {
+    } catch (const char *& exc) {
         errmsg = exc;
     }
     if (!errmsg.empty()) {
@@ -114,12 +120,13 @@ void ConnParams::addToParser(Parser &parser)
         throw BadArg(newmsg);
     }
 
-#define X(tp, varname, longname, shortname) parser.addOption(o_##varname);
+    #define X(tp, varname, longname, shortname) parser.addOption(o_##varname);
     X_OPTIONS(X)
-#undef X
+    #undef X
 }
 
-string ConnParams::getUserHome()
+string
+ConnParams::getUserHome()
 {
     string ret;
 #if _WIN32
@@ -140,7 +147,8 @@ string ConnParams::getUserHome()
     return ret;
 }
 
-string ConnParams::getConfigfileName()
+string
+ConnParams::getConfigfileName()
 {
     const char *override = getenv("CBC_CONFIG");
     if (override && *override) {
@@ -150,17 +158,19 @@ string ConnParams::getConfigfileName()
     return getUserHome() + CBC_CONFIG_FILENAME;
 }
 
-static void stripWhitespacePadding(string &s)
+static void
+stripWhitespacePadding(string& s)
 {
-    while (s.empty() == false && isspace((int)s[0])) {
+    while (s.empty() == false && isspace( (int) s[0])) {
         s.erase(0, 1);
     }
-    while (s.empty() == false && isspace((int)s[s.size() - 1])) {
-        s.erase(s.size() - 1, 1);
+    while (s.empty() == false && isspace( (int) s[s.size()-1])) {
+        s.erase(s.size()-1, 1);
     }
 }
 
-bool ConnParams::loadFileDefaults()
+bool
+ConnParams::loadFileDefaults()
 {
     // Figure out the home directory
     ifstream f(getConfigfileName().c_str());
@@ -179,12 +189,12 @@ bool ConnParams::loadFileDefaults()
         }
 
         pos = curline.find('=');
-        if (pos == string::npos || pos == curline.size() - 1) {
+        if (pos == string::npos || pos == curline.size()-1) {
             throw BadArg("Configuration file must be formatted as key-value pairs. Check " + getConfigfileName());
         }
 
         key = curline.substr(0, pos);
-        value = curline.substr(pos + 1);
+        value = curline.substr(pos+1);
         stripWhitespacePadding(key);
         stripWhitespacePadding(value);
         if (key.empty() || value.empty()) {
@@ -221,7 +231,8 @@ bool ConnParams::loadFileDefaults()
     return true;
 }
 
-static void writeOption(ofstream &f, StringOption &opt, const string &key)
+static void
+writeOption(ofstream& f, StringOption& opt, const string& key)
 {
     if (!opt.passed()) {
         return;
@@ -229,14 +240,15 @@ static void writeOption(ofstream &f, StringOption &opt, const string &key)
     f << key << '=' << opt.const_result() << endl;
 }
 
-void ConnParams::writeConfig(const string &s)
+void
+ConnParams::writeConfig(const string& s)
 {
     // Figure out the intermediate directories
     ofstream f;
     try {
-        f.exceptions(std::ios::failbit | std::ios::badbit);
+        f.exceptions(std::ios::failbit|std::ios::badbit);
         f.open(s.c_str());
-    } catch (std::exception &ex) {
+    } catch (std::exception& ex) {
         throw std::runtime_error("Couldn't open " + s + " " + ex.what());
     }
 
@@ -263,7 +275,8 @@ void ConnParams::writeConfig(const string &s)
     f.close();
 }
 
-void ConnParams::fillCropts(lcb_create_st &cropts)
+void
+ConnParams::fillCropts(lcb_create_st& cropts)
 {
     passwd = o_passwd.result();
     if (passwd == "-") {
@@ -273,13 +286,13 @@ void ConnParams::fillCropts(lcb_create_st &cropts)
     if (o_connstr.passed()) {
         if (o_host.passed() || o_bucket.passed()) {
             throw BadArg("Use of the deprecated "
-                         "-h/--host or -b/--bucket options with -U is "
-                         "not allowed!");
+                "-h/--host or -b/--bucket options with -U is "
+                "not allowed!");
         }
         connstr = o_connstr.const_result();
         if (connstr.find('?') == string::npos) {
             connstr += '?';
-        } else if (connstr[connstr.size() - 1] != '&') {
+        } else if (connstr[connstr.size()-1] != '&') {
             connstr += '&';
         }
     } else {
@@ -357,7 +370,7 @@ void ConnParams::fillCropts(lcb_create_st &cropts)
         connstr += '&';
     }
 
-    const std::vector< std::string > &extras = o_cparams.const_result();
+    const std::vector<std::string>& extras = o_cparams.const_result();
     for (size_t ii = 0; ii < extras.size(); ii++) {
         connstr += extras[ii];
         connstr += '&';
@@ -383,38 +396,43 @@ void ConnParams::fillCropts(lcb_create_st &cropts)
     }
 }
 
-template < typename T > void doPctl(lcb_INSTANCE *instance, int cmd, T arg)
+
+
+template <typename T>
+void doPctl(lcb_t instance, int cmd, T arg)
 {
-    lcb_STATUS err;
-    err = lcb_cntl(instance, LCB_CNTL_SET, cmd, (void *)arg);
+    lcb_error_t err;
+    err = lcb_cntl(instance, LCB_CNTL_SET, cmd, (void*)arg);
     if (err != LCB_SUCCESS) {
         throw LcbError(err);
     }
 }
 
-template < typename T > void doSctl(lcb_INSTANCE *instance, int cmd, T arg)
+template <typename T>
+void doSctl(lcb_t instance, int cmd, T arg)
 {
-    doPctl< T * >(instance, cmd, &arg);
+    doPctl<T*>(instance, cmd, &arg);
 }
 
-void doStringCtl(lcb_INSTANCE *instance, const char *s, const char *val)
+void doStringCtl(lcb_t instance, const char *s, const char *val)
 {
-    lcb_STATUS err;
+    lcb_error_t err;
     err = lcb_cntl_string(instance, s, val);
     if (err != LCB_SUCCESS) {
         throw LcbError(err);
     }
 }
 
-lcb_STATUS ConnParams::doCtls(lcb_INSTANCE *instance)
+lcb_error_t
+ConnParams::doCtls(lcb_t instance)
 {
     try {
         if (o_saslmech.passed()) {
-            doPctl< const char * >(instance, LCB_CNTL_FORCE_SASL_MECH, o_saslmech.result().c_str());
+            doPctl<const char *>(instance,LCB_CNTL_FORCE_SASL_MECH, o_saslmech.result().c_str());
         }
 
         // Set the detailed error codes option
-        doSctl< int >(instance, LCB_CNTL_DETAILED_ERRCODES, 1);
+        doSctl<int>(instance, LCB_CNTL_DETAILED_ERRCODES, 1);
 
         if (!o_connstr.passed() || o_connstr.result().find("compression=") == std::string::npos) {
             int opts = LCB_COMPRESS_IN;
@@ -426,7 +444,7 @@ lcb_STATUS ConnParams::doCtls(lcb_INSTANCE *instance)
             }
             doPctl(instance, LCB_CNTL_COMPRESSION_OPTS, &opts);
         }
-    } catch (lcb_STATUS &err) {
+    } catch (lcb_error_t &err) {
         return err;
     }
     return LCB_SUCCESS;

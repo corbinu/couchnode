@@ -1,6 +1,6 @@
 /* -*- Mode: C; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2014-2019 Couchbase, Inc.
+ *     Copyright 2014 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -50,6 +50,7 @@ extern "C" {
  * @{
  */
 
+
 /** @brief Wrapper around OpenSSL's `SSL_CTX` */
 typedef struct lcbio_SSLCTX *lcbio_pSSLCTX;
 
@@ -57,9 +58,10 @@ typedef struct lcbio_SSLCTX *lcbio_pSSLCTX;
  * @brief Determine if SSL is supported in the current build
  * @return true if supported, false otherwise
  */
-int lcbio_ssl_supported(void);
+int
+lcbio_ssl_supported(void);
 
-lcbio_pSSLCTX lcbio_ssl_new__fallback(const char *, const char *, const char *, int, lcb_STATUS *, lcb_settings *);
+lcbio_pSSLCTX lcbio_ssl_new__fallback(const char *, const char *, const char *, int, lcb_error_t *, lcb_settings *);
 
 #ifndef LCB_NO_SSL
 /**
@@ -73,18 +75,20 @@ lcbio_pSSLCTX lcbio_ssl_new__fallback(const char *, const char *, const char *, 
  *
  * @return A new SSL context, or NULL on error.
  */
-lcbio_pSSLCTX lcbio_ssl_new(const char *tsfile, const char *cafile, const char *keyfile, int noverify, lcb_STATUS *errp,
-                            lcb_settings *settings);
+lcbio_pSSLCTX lcbio_ssl_new(const char *tsfile, const char *cafile, const char *keyfile, int noverify,
+                            lcb_error_t *errp, lcb_settings *settings);
 #else
 #define lcbio_ssl_new lcbio_ssl_new__fallback
 #endif
+
 
 /**
  * Free the SSL context. This should be done when libcouchbase has nothing else
  * to do with the certificate
  * @param ctx
  */
-void lcbio_ssl_free(lcbio_pSSLCTX ctx);
+void
+lcbio_ssl_free(lcbio_pSSLCTX ctx);
 
 /**
  * Apply the SSL settings to a given socket.
@@ -96,7 +100,8 @@ void lcbio_ssl_free(lcbio_pSSLCTX ctx);
  * @param sctx The context returned by lcbio_ssl_new()
  * @return
  */
-lcb_STATUS lcbio_ssl_apply(lcbio_SOCKET *sock, lcbio_pSSLCTX sctx);
+lcb_error_t
+lcbio_ssl_apply(lcbio_SOCKET *sock, lcbio_pSSLCTX sctx);
 
 /**
  * Checks whether the given socket is using SSL
@@ -104,7 +109,8 @@ lcb_STATUS lcbio_ssl_apply(lcbio_SOCKET *sock, lcbio_pSSLCTX sctx);
  * @return true if using SSL, false if plain (or not yet applied)
  */
 LCB_INTERNAL_API
-int lcbio_ssl_check(lcbio_SOCKET *sock);
+int
+lcbio_ssl_check(lcbio_SOCKET *sock);
 
 /**
  * Retrieves the internal error code from the SSL object within the socket.
@@ -115,7 +121,8 @@ int lcbio_ssl_check(lcbio_SOCKET *sock);
  * error code.
  */
 LCB_INTERNAL_API
-lcb_STATUS lcbio_ssl_get_error(lcbio_SOCKET *sock);
+lcb_error_t
+lcbio_ssl_get_error(lcbio_SOCKET *sock);
 
 /**
  * @brief
@@ -123,7 +130,8 @@ lcb_STATUS lcbio_ssl_get_error(lcbio_SOCKET *sock);
  * @todo There is currently nothing checking if this hasn't been called more
  * than once.
  */
-void lcbio_ssl_global_init(void);
+void
+lcbio_ssl_global_init(void);
 
 struct lcb_settings_st;
 
@@ -140,7 +148,8 @@ struct lcb_settings_st;
  * derived.
  * @return
  */
-lcb_STATUS lcbio_sslify_if_needed(lcbio_SOCKET *sock, struct lcb_settings_st *settings);
+lcb_error_t
+lcbio_sslify_if_needed(lcbio_SOCKET *sock, struct lcb_settings_st *settings);
 
 /**@}*/
 

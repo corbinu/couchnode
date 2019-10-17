@@ -1,6 +1,6 @@
 /* -*- Mode: C; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*
- *     Copyright 2014-2019 Couchbase, Inc.
+ *     Copyright 2014 Couchbase, Inc.
  *
  *   Licensed under the Apache License, Version 2.0 (the "License");
  *   you may not use this file except in compliance with the License.
@@ -37,11 +37,9 @@
 
 struct lcb_settings_st;
 
-namespace lcb
-{
-class SessionRequest : public lcb::io::ConnectionRequest
-{
-  public:
+namespace lcb {
+class SessionRequest : public lcb::io::ConnectionRequest {
+public:
     /**
      * @brief Start negotiation on a connected socket
      *
@@ -71,21 +69,21 @@ class SessionRequest : public lcb::io::ConnectionRequest
      * @see lcb::sessreq_cancel()
      * @see LCBIO_CONNREQ_MKGENERIC
      */
-    static SessionRequest *start(lcbio_SOCKET *sock, lcb_settings_st *settings, uint32_t tmo,
-                                 lcbio_CONNDONE_cb callback, void *data);
+    static SessionRequest *start(lcbio_SOCKET *sock, lcb_settings_st *settings,
+                                 uint32_t tmo, lcbio_CONNDONE_cb callback,
+                                 void *data);
 
     /**
      * @brief Cancel a pending SASL negotiation request
      * @param handle The handle to cancel
      */
     virtual void cancel() = 0;
-    virtual ~SessionRequest() {}
+    virtual ~SessionRequest(){}
 };
 class SessionRequestImpl;
 
-class SessionInfo : public lcbio_PROTOCTX
-{
-  public:
+class SessionInfo : public lcbio_PROTOCTX {
+public:
     /**
      * @brief Get an opaque handle representing the negotiated state of the socket
      * @param sock The negotiated socket
@@ -94,7 +92,7 @@ class SessionInfo : public lcbio_PROTOCTX
      *
      * @see get_mech()
      */
-    static SessionInfo *get(lcbio_SOCKET *);
+    static SessionInfo* get(lcbio_SOCKET*);
 
     /**
      * @brief Get the mechanism employed for authentication
@@ -102,8 +100,7 @@ class SessionInfo : public lcbio_PROTOCTX
      * @return A string indicating the mechanism used. This may be `PLAIN`,
      * `CRAM-MD5`, `SCRAM-SHA1`, `SCRAM-SHA256` or `SCRAM-SHA512` .
      */
-    const std::string &get_mech() const
-    {
+    const std::string& get_mech() const {
         return mech;
     }
 
@@ -115,15 +112,16 @@ class SessionInfo : public lcbio_PROTOCTX
      */
     bool has_feature(uint16_t feature) const;
 
-  private:
+private:
     SessionInfo();
     friend class lcb::SessionRequestImpl;
 
     std::string mech;
-    std::vector< uint16_t > server_features;
+    std::vector<uint16_t> server_features;
 };
 
-} // namespace lcb
+
+} // namespace
 
 /**@}*/
 
