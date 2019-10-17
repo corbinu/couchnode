@@ -20,19 +20,18 @@
   "dependencies": {
     "@types/node": "^12.11.1",
     "bindings": "^1.5.0",
-    "debug": "^4.1.1",
+    "dev-null": "^0.1.1",
     "nan": "^2.14.0",
-    "parse-duration": "^0.1.1",
     "prebuild-install": "^5.3.2",
-    "qs": "^6.9.0",
     "request": "^2.88.0",
     "winston": "^3.2.1"
   },
   "typings": "couchbase",
   "devDependencies": {
-    "chai": "^4.2.0",
+    "cls-hooked": "^4.2.2",
     "jshint": "^2.10.2",
     "mocha": "^6.2.1",
+    "nyc": "^14.1.1",
     "prebuild": "^9.1.1",
     "uuid": "^3.3.3"
   },
