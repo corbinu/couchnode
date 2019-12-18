@@ -17,8 +17,6 @@ config.json
 # The original file after running astyle:
 *.orig
 
-.DS_Store
-
 *~
 
 /.lock-wscript
@@ -29,4 +27,4 @@ config.json
 builderror.log
 configcache.txt
 /coverage/
-/prebuilds/
+/.nyc_output/

@@ -2,32 +2,32 @@ sudo: required
 dist: xenial
 language: java
 services:
-- docker
+  - docker
 matrix:
   include:
-  - os: linux
-    env:
-    - OS="Linux"
-    - NODE_VERSION="12.0.0"
-  - os: osx
-    env:
-    - NODE_VERSION="12.0.0"
+    - os: linux
+      env:
+        - OS="Linux"
+        - NODE_VERSION="12.0.0"
+    - os: osx
+      env:
+        - NODE_VERSION="12.0.0"
 before_install:
-- rm -rf ~/.nvm/ && git clone --depth 1 https://github.com/creationix/nvm.git ~/.nvm
-- source ~/.nvm/nvm.sh
-- nvm install $NODE_VERSION
-- nvm use $NODE_VERSION
+  - rm -rf ~/.nvm/ && git clone --depth 1 https://github.com/creationix/nvm.git ~/.nvm
+  - source ~/.nvm/nvm.sh
+  - nvm install $NODE_VERSION
+  - nvm use $NODE_VERSION
 install:
-- export PATH=./node_modules/.bin/:$PATH
-- npm install
-- if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then make test; fi;
-- mkdir -p prebuilds/@corbinu
-- if [[ "$TRAVIS_BRANCH" = "master" ]]; then prebuild --upload $GITHUB_TOKEN -t 10.0.0 -t 11.0.0 -t 12.0.0; fi;
-- if [[ "$TRAVIS_BRANCH" = "master" ]]; then if [[ "$TRAVIS_OS_NAME" == "linux" ]];
-  then docker run -t --volume "$(pwd):/install" corbinu/alpine-node-builder prebuild
-  --libc=musl --upload $GITHUB_TOKEN -t 10.0.0 -t 11.0.0 -t 12.0.0; fi; fi;
+  - export PATH=./node_modules/.bin/:$PATH
+  - npm install
+  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then make test; fi;
+  - mkdir -p prebuilds/@corbinu
+  - if [[ "$TRAVIS_BRANCH" = "master" ]]; then prebuild --upload $GITHUB_TOKEN -t 10.0.0 -t 12.0.0; -t 13.0.0 fi;
+  - if [[ "$TRAVIS_BRANCH" = "master" ]]; then if [[ "$TRAVIS_OS_NAME" == "linux" ]];
+    then docker run -t --volume "$(pwd):/install" corbinu/alpine-node-builder prebuild
+    --libc=musl --upload $GITHUB_TOKEN -t 10.0.0 -t 12.0.0; -t 13.0.0; fi; fi;
 script:
-- echo done
+  - echo done
 deploy:
   provider: npm
   email: corbinu@openswimsoftware.com
