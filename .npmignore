@@ -10,5 +10,4 @@ README.md
 CONTRIBUTING.md
 AUTHORS
 Makefile
-/build/
-/prebuilds/
+prebuilds/

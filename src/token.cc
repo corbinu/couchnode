@@ -74,7 +74,7 @@ NAN_METHOD(MutationToken::fnInspect)
 }
 
 Local<Value> MutationToken::CreateToken(lcb_t instance,
-                                         const lcb_MUTATION_TOKEN *token)
+                                        const lcb_MUTATION_TOKEN *token)
 {
     if (!LCB_MUTATION_TOKEN_ISVALID(token)) {
         return Nan::Undefined();
@@ -94,7 +94,7 @@ Local<Value> MutationToken::CreateToken(lcb_t instance,
         Nan::CopyBuffer((const char *)tokenBuf,
                         sizeof(lcb_MUTATION_TOKEN) + nameStrLen)
             .ToLocalChecked();
-    ret->Set(0, tokenData);
+    Nan::Set(ret, 0, tokenData);
 
     delete[] tokenBuf;
 
@@ -102,7 +102,7 @@ Local<Value> MutationToken::CreateToken(lcb_t instance,
 }
 
 Local<Value> MutationToken::CreateToken(lcb_t instance, int cbtype,
-                                         const lcb_RESPBASE *respbase)
+                                        const lcb_RESPBASE *respbase)
 {
     return CreateToken(instance, lcb_resp_get_mutation_token(cbtype, respbase));
 }
@@ -122,7 +122,7 @@ bool _StrToToken(Local<Value> obj, lcb_MUTATION_TOKEN *p, int pSize)
 bool _ObjToToken(Local<Value> obj, lcb_MUTATION_TOKEN *p, int pSize)
 {
     Local<Object> realObj = obj.As<Object>();
-    Local<Value> tokenData = realObj->Get(0);
+    Local<Value> tokenData = Nan::Get(realObj, 0).ToLocalChecked();
 
     if (!node::Buffer::HasInstance(tokenData)) {
         return false;

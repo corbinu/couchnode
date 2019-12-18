@@ -62,7 +62,7 @@ Local<Value> Cas::CreateCas(uint64_t cas)
 
     Local<Value> casData =
         Nan::CopyBuffer((char *)&cas, sizeof(uint64_t)).ToLocalChecked();
-    ret->Set(0, casData);
+    Nan::Set(ret, 0, casData);
 
     return ret;
 }
@@ -80,7 +80,7 @@ bool _StrToCas(Local<Value> obj, uint64_t *p)
 bool _ObjToCas(Local<Value> obj, uint64_t *p)
 {
     Local<Object> realObj = obj.As<Object>();
-    Local<Value> casData = realObj->Get(0);
+    Local<Value> casData = Nan::Get(realObj, 0).ToLocalChecked();
 
     if (!node::Buffer::HasInstance(casData)) {
         return false;
