@@ -122,8 +122,12 @@ bool _StrToToken(Local<Value> obj, lcb_MUTATION_TOKEN *p, int pSize)
 bool _ObjToToken(Local<Value> obj, lcb_MUTATION_TOKEN *p, int pSize)
 {
     Local<Object> realObj = obj.As<Object>();
-    Local<Value> tokenData = Nan::Get(realObj, 0).ToLocalChecked();
+    MaybeLocal<Value> tokenDataM = Nan::Get(realObj, 0);
+    if (tokenDataM.IsEmpty()) {
+        return false;
+    }
 
+    Local<Value> tokenData = tokenDataM.ToLocalChecked();
     if (!node::Buffer::HasInstance(tokenData)) {
         return false;
     }
