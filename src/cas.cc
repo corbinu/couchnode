@@ -80,8 +80,12 @@ bool _StrToCas(Local<Value> obj, uint64_t *p)
 bool _ObjToCas(Local<Value> obj, uint64_t *p)
 {
     Local<Object> realObj = obj.As<Object>();
-    Local<Value> casData = Nan::Get(realObj, 0).ToLocalChecked();
+    MaybeLocal<Value> casDataM = Nan::Get(realObj, 0);
+    if (casDataM.IsEmpty()) {
+        return false;
+    }
 
+    Local<Value> casData = casDataM.ToLocalChecked();
     if (!node::Buffer::HasInstance(casData)) {
         return false;
     }
