@@ -18,22 +18,22 @@
   "license": "Apache-2.0",
   "name": "@corbinu/couchbase",
   "dependencies": {
-    "@types/node": "^12.12.20",
+    "@types/node": "^12.19.5",
     "bindings": "^1.5.0",
     "dev-null": "^0.1.1",
-    "nan": "^2.14.0",
-    "prebuild-install": "^5.3.3",
-    "request": "^2.88.0",
-    "winston": "^3.2.1"
+    "nan": "^2.14.2",
+    "prebuild-install": "^6.0.0",
+    "request": "^2.88.2",
+    "winston": "^3.3.3"
   },
   "typings": "couchbase",
   "devDependencies": {
     "cls-hooked": "^4.2.2",
-    "jshint": "^2.10.2",
-    "mocha": "^6.2.2",
-    "nyc": "^14.1.1",
-    "prebuild": "^9.1.1",
-    "uuid": "^3.3.3"
+    "jshint": "^2.12.0",
+    "mocha": "^8.2.1",
+    "nyc": "^15.1.0",
+    "prebuild": "^10.0.1",
+    "uuid": "^3.4.0"
   },
   "repository": {
     "type": "git",
